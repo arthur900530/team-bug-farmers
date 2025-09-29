@@ -2,17 +2,22 @@
 Create high-fidelity mockups for each of your two chosen user stories.
 
 ## Screen 1: Join Meeting
-User clicks a link --> launches Zoom. This is the first screen they see.
+#### User clicks a link → launches Zoom. This is the first screen they see.
 ![Screen 1 of join](/assets/mockups/screen1.png)
 
 _Description: Join meeting screen shows a pop up with our current microphone and video settings (on/off) and a big join button._
 
 ## Screen 2: In Meeting
-User clicked Join button --> in meeting. 
+User clicked Join button → in meeting. 
 ![Screen 2 of in meeting](/assets/mockups/screen2.png)
 
 _Description: In meeting screen. No video because the user turned that off. There is a menu bar at the bottom with (a)  buttons for (a) the microphone and camera, (b) their respective setting (the carets), (c) participants, (d) reactions, (e) share, (f), host tools, (g) meeting info, (h) more info, and (i) exit . Note that the audio is unmuted and we see that with the icon and the text._
 
+## Screen 3: Mute Mic
+User clicks mic to mute it.
+![Screen 3 of muted mic](/assets/mockups/screen3.png)
+
+_Description: In meeting screen. Mic now has a line through it, says muted, and has the lock. This lock indicates that we are guaranteed to be muted right now._
 
 
 
