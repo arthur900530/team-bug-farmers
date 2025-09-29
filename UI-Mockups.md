@@ -25,6 +25,24 @@ _Description: In meeting screen. Mic now has a line through it, says muted, and 
 
 _Description: Mic is now unmuted and there is a banner that pops up for some time notifying user of the issue with their external audio input device._
 
+## Screen 5: Audio Settings
+#### Click on caret next to microphone to launch audio settings.
+![Screen 5 of audio settings](/assets/mockups/screen5.png)
+
+_Description: Audio settings appear as a pop-up with a list of standard settings and a button to general settings._
+
+> [!WARNING]
+> This mockup is wrong because the audio settings should pop up on top of the existing meeting but it's only showing up on the user profile/settings window.
+
+> ## Screen 6: General Settings
+#### Click on "More settings..." → settings pop up.
+![Screen 6 of more settings](/assets/mockups/screen6.png)
+
+_Description: General settings inlude a feature to enable screen share. This happens while the user is in their meeting rather than one they need to enable from System Settings which will restart their application and interrupt the meeting._
+
+> [!WARNING]
+> This mockup is wrong because the settings should pop up on top of the existing meeting but it's only showing up on the user profile/settings window.
+
 
 [^1]: **Prompt 1:** Create high-fidelity mockups of the following screens. I have provided what the screens should look like so copy them AND add functionality to move between screens. Screen 1: [Context: user joins a Zoom meeting which launches the Zoom interface]. The screen consists of the Zoom account with a pop-up window to join a meeting and the user's preference for audio and video to be on or off and the join button. By default, pretend camera is off but microphone is on. The microphone icon should show it is on (no line) but the camera should show it is off (line through it). When we lick the JOIN button, it moves to Screen 2. Screen 2: [Context: in the meeting] We see no video but also there is a menu bar at the bottom with mic, video, participants, chat, react, share, meeting info, etc. (All included in image for screen 2). When the user clicks the mic button, it moves to Screen 3. Screen 3: [mic muted] Almost the same as screen 2 but the microphone icon is muted (line through it) AND there is a lock icon on it as well. This indicates that we have a guaranteed mute. Move to Screen 4. Screen 4: [Context: users' headphones are malfunctioning]. Lock disappears on mute button → microphone is unmuted → banner appears for a few seconds on the top of the video indicating they have been unmuted to do their external headphones. Screen 5: [they remove headphones and use computer audio]: Notification goes away to confirm that issue isn't present anymore. → Click mute → Screen 3 → Screen 6. Screen 6: Microphone is muted but now they want to modify settings. They click the caret next to the microphone → Screen 7. Screen 7: In settings, they set the volume level to be at a max. → Screen 8. Screen 8: allow screen sharing settings → screen. DONE <br/>
 **Prompt 2:** For the microphone, can you make sure when we click mute that a lock also appears. <br/>
