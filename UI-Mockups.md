@@ -1,5 +1,5 @@
 # UI Mockups in Figma[^1]
-Create high-fidelity mockups for each of your two chosen user stories.
+Create high-fidelity mockups for each of your two chosen user stories. [Try it here](https://bust-gift-55503019.figma.site)
 
 ## Screen 1: Join Meeting
 #### User clicks a link → launches Zoom. This is the first screen they see.
