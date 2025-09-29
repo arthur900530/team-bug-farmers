@@ -51,10 +51,14 @@ _Description: Still in meeting with existing settings._
 
 ## Screens 8 & 9: Resizing Screens
 #### Not too responsive yet
-<div class="container markdown>
-  - ![](/assets/mockups/mobile.png)
-  - ![](/assets/mockups/wide.png)
-</div>
+<p>
+	<a href="/assets/mockups/mobile.png" target="_blank">
+		<img src="/assets/mockups/mobile.png" width="30%" height="auto">
+	</a>
+	<a href="/assets/mockups/wide.png" target="_blank">
+		<img src="/assets/mockups/wide.png" width="70%" height="auto">
+	</a>
+</p>
 
 _Description: (Left) mobile doesn't compress the menu bar correctly. It just gets clipped. (Right) wide desktop expands just fine._
 
