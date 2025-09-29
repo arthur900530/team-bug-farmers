@@ -56,7 +56,7 @@ _Description: Still in meeting with existing settings._
 		<img src="/assets/mockups/mobile.png" width="30%" height="auto">
 	</a>
 	<a href="/assets/mockups/wide.png" target="_blank">
-		<img src="/assets/mockups/wide.png" width="70%" height="auto">
+		<img src="/assets/mockups/wide.png" width="67%" height="auto">
 	</a>
 </p>
 
