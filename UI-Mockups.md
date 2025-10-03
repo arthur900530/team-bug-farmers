@@ -61,13 +61,13 @@ _Description: Error notifying user that they could not join and a button to try 
 #### Somewhat responsive but not the most usable
 <p>
 	<a href="/assets/mockups/mobile.png" target="_blank">
-		<img src="/assets/mockups/wide.png" width="20%" height="auto">
+		<img src="/assets/mockups/wide.png" width="40%" height="auto">
 	</a>
 	<a href="/assets/mockups/wide.png" target="_blank">
-		<img src="/assets/mockups/medium.png" width="38%" height="auto">
+		<img src="/assets/mockups/medium.png" width="28%" height="auto">
 	</a>
 	<a href="/assets/mockups/wide.png" target="_blank">
-		<img src="/assets/mockups/mobile.png" width="38%" height="auto">
+		<img src="/assets/mockups/mobile.png" width="28%" height="auto">
 	</a>
 </p>
 
