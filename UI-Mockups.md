@@ -79,4 +79,11 @@ _Description: (Left) wide is correct and usable. (Middle) is somewhat awkward an
 **Prompt 3:** When the mic is muted, can you make the lock slightly bigger and also not have the text "Noise removal is on. Mute my audio (...)" but instead "Muted". <br/>
 **Prompt 4:** Can you also make sure that when video is off, it has the text "off". And when it's on "on". For audio, "muted" for muted and "unmuted" for on. <br/>
 **Prompt 5:** Can you also make sure, when we click the caret for audio, that the audio settings popup shows up on top of the existing screen for the meeting (e.g., screen 3). For audio settings list: microphone level, test speaker, microphone (MacBook Pro microphone), speaker, and then "more settings...". We then want to click more settings which will go to a new screen that also has a popup like audio but for all settings AND the screen 3 (meeting) is still behind it. In this setting, there should be a click box to allow screen share. <br/>
-**Ran out of prompts..**
+**Prompt 6:** Correction: first screen should have a
+"join" button not "start".
+Can you also add more screens for:
+(1) if the user turns on their mic but the audio device isn't connected so it shows an error
+(2) the first time we click join, it shows an error that we couldn't connect to the meeting and a button asking to try again which we click and it succeeds so we move on to the next screen (in the meeting)
+(3) make sure all screens are
+RESIZABLE. When the in the meeting screen is wide, everything is ok. But maybe sure that in compact (almost mobile mode), that all button remain visible OR are condensed by the three dots to condense what's shown on the screen while maintaining a level of visibility. <br/>
+**Prompt 7:** Make sure that when we click a caret to go to settings, the settings pop up in ON TOP OF the meeting screen so we remain in the meeting and NOT the default account screen.
