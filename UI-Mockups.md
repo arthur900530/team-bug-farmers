@@ -49,18 +49,29 @@ _Description: General settings inlude a feature to enable screen share. This hap
 
 _Description: Still in meeting with existing settings._
 
-## Screens 8 & 9: Resizing Screens
-#### Not too responsive yet
+## Screen 8: Errors
+### Error when initially joining meeting
+
+#### Enabled screen share → settings close → still in meeting.
+![Screen 8 of standard meeting screen](/assets/mockups/error1.png)
+
+_Description: Error notifying user that they could not join and a button to try again._
+
+## Screens 9, 10 & 11: Resizing Screens
+#### Somewhat responsive but not the most usable
 <p>
 	<a href="/assets/mockups/mobile.png" target="_blank">
-		<img src="/assets/mockups/mobile.png" width="30%" height="auto">
+		<img src="/assets/mockups/wide.png" width="20%" height="auto">
 	</a>
 	<a href="/assets/mockups/wide.png" target="_blank">
-		<img src="/assets/mockups/wide.png" width="67%" height="auto">
+		<img src="/assets/mockups/medium.png" width="38%" height="auto">
+	</a>
+	<a href="/assets/mockups/wide.png" target="_blank">
+		<img src="/assets/mockups/mobile.png" width="38%" height="auto">
 	</a>
 </p>
 
-_Description: (Left) mobile doesn't compress the menu bar correctly. It just gets clipped. (Right) wide desktop expands just fine._
+_Description: (Left) wide is correct and usable. (Middle) is somewhat awkward and hides some of the buttons which makes this less usable. (Right) Mobile is compact but looks more of how we'd expect._
 
 
 [^1]: **Prompt 1:** Create high-fidelity mockups of the following screens. I have provided what the screens should look like so copy them AND add functionality to move between screens. Screen 1: [Context: user joins a Zoom meeting which launches the Zoom interface]. The screen consists of the Zoom account with a pop-up window to join a meeting and the user's preference for audio and video to be on or off and the join button. By default, pretend camera is off but microphone is on. The microphone icon should show it is on (no line) but the camera should show it is off (line through it). When we lick the JOIN button, it moves to Screen 2. Screen 2: [Context: in the meeting] We see no video but also there is a menu bar at the bottom with mic, video, participants, chat, react, share, meeting info, etc. (All included in image for screen 2). When the user clicks the mic button, it moves to Screen 3. Screen 3: [mic muted] Almost the same as screen 2 but the microphone icon is muted (line through it) AND there is a lock icon on it as well. This indicates that we have a guaranteed mute. Move to Screen 4. Screen 4: [Context: users' headphones are malfunctioning]. Lock disappears on mute button → microphone is unmuted → banner appears for a few seconds on the top of the video indicating they have been unmuted to do their external headphones. Screen 5: [they remove headphones and use computer audio]: Notification goes away to confirm that issue isn't present anymore. → Click mute → Screen 3 → Screen 6. Screen 6: Microphone is muted but now they want to modify settings. They click the caret next to the microphone → Screen 7. Screen 7: In settings, they set the volume level to be at a max. → Screen 8. Screen 8: allow screen sharing settings → screen. DONE <br/>
