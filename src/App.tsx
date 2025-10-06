@@ -238,14 +238,14 @@ export default function App() {
       {renderCurrentScreen()}
       
       {/* Developer Controls - for testing */}
-      <div className="fixed bottom-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg z-50 text-white text-sm">
+      <div className="fixed bottom-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg z-50 text-white">
         <div className="mb-2">Dev Controls:</div>
-        <label className="flex items-center space-x-2 cursor-pointer">
+        <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded transition-colors">
           <input
             type="checkbox"
             checked={audioDeviceConnected}
             onChange={(e) => setAudioDeviceConnected(e.target.checked)}
-            className="rounded"
+            className="rounded cursor-pointer"
           />
           <span>Audio Device Connected</span>
         </label>
