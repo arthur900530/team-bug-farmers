@@ -24,29 +24,150 @@ This application demonstrates three main user stories:
 
 ### Prerequisites
 - Node.js 18+ (LTS recommended)
-- npm or yarn
+- npm (comes with Node.js)
 
-### Installation
+---
+
+## 📦 Complete Setup Guide
+
+### **Step 1: Clone the Repository**
 
 ```bash
-# Install dependencies
+git clone https://github.com/arthur900530/team-bug-farmers.git
+cd team-bug-farmers
+```
+
+---
+
+### **Step 2: Frontend Setup**
+
+```bash
+# Install frontend dependencies
 npm install
 
-# Start development server
+# Start frontend development server
 npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
 ```
 
-### Development Server
+The frontend will run on **http://localhost:5173/**
 
-After running `npm run dev`, open your browser to:
+---
+
+### **Step 3: Backend Setup**
+
+Open a **new terminal window** (keep frontend running):
+
+```bash
+# Navigate to backend directory
+cd backend
+
+# Install backend dependencies
+npm install
+
+# Start backend server
+npm start
 ```
-http://localhost:5173/
+
+The backend API will run on **http://localhost:3001/**
+
+**Backend endpoints:**
+- Health check: http://localhost:3001/api/health
+- Users API: http://localhost:3001/api/users
+
+---
+
+### **Step 4: Database Setup**
+
+The SQLite database is created automatically when you start the backend!
+
+**Location:** `backend/audio-states.db`
+
+**Check database contents:**
+```bash
+cd backend
+node check-db.js
+```
+
+**Clear database (optional):**
+```bash
+cd backend
+node clear-db.js
+```
+
+---
+
+## ✅ Verify Setup
+
+### **1. Check Frontend**
+- Open browser: http://localhost:5173/
+- Should see the join meeting screen
+
+### **2. Check Backend**
+- Open browser: http://localhost:3001/api/health
+- Should see: `{"status":"ok",...}`
+
+### **3. Check Database**
+```bash
+cd backend
+node check-db.js
+```
+
+### **4. Test Integration**
+1. Click "Join Meeting" in frontend
+2. Click "Retry" to join
+3. Allow microphone permission
+4. Mute/unmute or switch devices
+5. Check database again:
+   ```bash
+   cd backend
+   node check-db.js
+   ```
+6. You should see your user data!
+
+---
+
+## 🏃‍♂️ Quick Start (Both Servers)
+
+**Terminal 1 (Frontend):**
+```bash
+npm run dev
+```
+
+**Terminal 2 (Backend):**
+```bash
+cd backend && npm start
+```
+
+**Then open:** http://localhost:5173/
+
+---
+
+## 📝 Environment Configuration (Optional)
+
+Create `.env` file in project root:
+```env
+VITE_API_URL=http://localhost:3001/api
+```
+
+---
+
+## 🔧 Available Scripts
+
+### Frontend
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm run preview  # Preview production build
+npm run lint     # Run ESLint
+```
+
+### Backend
+```bash
+cd backend
+npm start        # Start production server
+npm run dev      # Start with auto-reload (nodemon)
+node check-db.js # View database contents
+node clear-db.js # Clear all database data
 ```
 
 ## 🎮 Using the Demo
@@ -54,25 +175,60 @@ http://localhost:5173/
 ### Initial Flow
 1. **Join Meeting Modal**: Start by clicking "Join Meeting" 
 2. **Connection Error**: The first attempt will fail (by design) - click "Retry"
-3. **Meeting View**: You'll enter the main meeting interface
+3. **Microphone Permission**: Allow browser to access your microphone
+4. **Meeting View**: You'll enter the main meeting interface with real audio!
 
-### Testing Features
+---
 
-#### Mute Verification
-- Click the microphone button to mute/unmute
-- When muted, a green checkmark appears indicating verification
-- The system checks both hardware and software mute states
+## 🧪 Testing Features
 
-#### Audio Device Error Testing
-- Look for the **"Dev Controls"** panel in the bottom-right corner
-- Uncheck **"Audio Device Connected"** to simulate device disconnection
-- Try to unmute - you'll see an error modal
-- Re-check the box to restore the device
+### **1. Real Microphone Mute/Unmute**
+```
+1. Click the microphone button in the toolbar
+2. Watch the audio level drop to 0% when muted
+3. See the green checkmark appear ✅
+4. Check database: cd backend && node check-db.js
+5. Your mute status is saved!
+```
 
-#### Settings Access
-- Click the settings icon (gear/cog) in the meeting toolbar
-- Explore audio, video, general, and screen share settings
-- Click the dropdown arrow next to the microphone button for quick audio settings
+### **2. Device Switching**
+```
+1. Look at "Dev Controls" panel (bottom-right)
+2. Open the "Microphone:" dropdown
+3. Select a different device
+4. Audio switches seamlessly (mute state preserved)
+5. Database updates with new device
+```
+
+### **3. Real-Time Audio Monitoring**
+```
+1. Keep microphone unmuted
+2. Speak or make noise
+3. Watch "Audio Level" in Dev Controls change
+4. Values from 0-100% in real-time
+```
+
+### **4. Backend Integration**
+```
+1. Check "Connection Status" in Dev Controls
+2. Should show: ● API (green = connected)
+3. All actions sync to database automatically
+4. View your User ID in Dev Controls
+```
+
+### **5. Audio Device Error Simulation**
+```
+1. Uncheck "Audio Device Connected" in Dev Controls
+2. Try to unmute - you'll see an error modal
+3. Re-check the box to restore
+```
+
+### **6. Settings Access**
+```
+- Click settings icon (gear) in toolbar
+- Explore audio, video, general settings
+- Click dropdown arrow next to mic button for quick audio settings
+```
 
 ## 🏗️ Project Structure
 
@@ -108,6 +264,7 @@ src/
 
 ## 🎨 Tech Stack
 
+### Frontend
 - **React 18** - UI framework
 - **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
@@ -115,6 +272,18 @@ src/
 - **shadcn/ui** - UI component library
 - **Radix UI** - Headless UI primitives
 - **Lucide React** - Icon library
+- **Web Audio API** - Real microphone access
+
+### Backend
+- **Node.js** - Runtime environment
+- **Express** - Web framework
+- **better-sqlite3** - Fast SQLite database
+- **CORS** - Cross-origin resource sharing
+
+### Database
+- **SQLite** - File-based SQL database
+- **File:** `backend/audio-states.db`
+- **Schema:** user_states table with indexes
 
 ## 📚 Documentation
 
@@ -128,24 +297,83 @@ Detailed development specifications are available in the `assets/` directory:
 
 The application includes a **Dev Controls** panel (bottom-right) for testing:
 
-- **Audio Device Connected**: Toggle to simulate device connection/disconnection
-- This is only visible in development and should be removed for production
+- **Connection Status**: `● API` (connected) or `○ Offline` (backend unavailable)
+- **User ID**: Auto-generated unique identifier
+- **Audio Device Connected**: Toggle to simulate device disconnection
+- **Audio Status**: Real-time mute status and audio levels
+- **Microphone Selector**: Dropdown to switch between devices
+
+**Features:**
+- Live audio level visualization
+- Device switching without disconnection
+- Backend connectivity indicator
 
 ## 📝 Notes
 
-- This is a **prototype/mockup** - it doesn't actually connect to real meetings
-- Audio and video functionality is simulated
-- The UI flow demonstrates the intended user experience for the three user stories
-- Error states and edge cases are intentionally triggered for demonstration purposes
+### What's Real:
+- ✅ Microphone access and control
+- ✅ Mute/unmute functionality
+- ✅ Audio level monitoring
+- ✅ Device switching
+- ✅ Backend API with database
+- ✅ State persistence
 
-## 🔧 Available Scripts
+### What's Still Mocked:
+- ❌ Video camera functionality
+- ❌ WebRTC peer connections
+- ❌ Actual meeting rooms with other users
+- ❌ Audio/video transmission to other participants
 
+This is a **fully functional prototype** of the audio control system with real backend integration.
+
+## 🗄️ Database Management
+
+### View Database Contents
 ```bash
-npm run dev      # Start development server with hot reload
-npm run build    # Build optimized production bundle
-npm run preview  # Preview production build locally
-npm run lint     # Run ESLint for code quality checks
+cd backend
+node check-db.js
 ```
+
+**Output shows:**
+- User ID
+- Mute status (🔇 Muted / 🎤 Unmuted)
+- Current device
+- Room assignment
+- Timestamps
+
+### Clear Database
+```bash
+cd backend
+node clear-db.js
+```
+
+### SQL Queries
+```bash
+cd backend
+sqlite3 audio-states.db "SELECT * FROM user_states;"
+```
+
+### API Access (while backend is running)
+```bash
+# Get all users
+curl http://localhost:3001/api/users
+
+# Get specific user
+curl http://localhost:3001/api/users/user-abc123
+```
+
+**See `DATABASE_GUIDE.md` for complete database documentation.**
+
+---
+
+## 📚 Additional Documentation
+
+- **`ARCHITECTURE.md`** - System architecture with Mermaid diagrams
+- **`IMPLEMENTATION.md`** - Implementation details for microphone features
+- **`MICROPHONE_SWITCHING.md`** - Device switching guide
+- **`BACKEND_INTEGRATION.md`** - API integration guide
+- **`DATABASE_GUIDE.md`** - Database management guide
+- **`backend/README.md`** - Backend API documentation
 
 ## 🤝 Contributing
 
