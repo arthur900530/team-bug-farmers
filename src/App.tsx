@@ -8,6 +8,7 @@ import { AudioSettings } from './components/AudioSettings';
 import { AllSettings } from './components/AllSettings';
 import { ScreenShareSettings } from './components/ScreenShareSettings';
 import { audioService } from './services/audioService';
+import { updateMuteStatus, updateDevice, updateUserState, checkBackendHealth } from './services/backendService';
 
 type Screen = 
   | 'join' 
@@ -33,9 +34,21 @@ export default function App() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
+  const [userId] = useState<string>(() => `user-${Math.random().toString(36).substr(2, 9)}`);
+  const [backendConnected, setBackendConnected] = useState(false);
 
   // Initialize audio service on component mount
   useEffect(() => {
+    // Check backend connectivity
+    checkBackendHealth().then(isHealthy => {
+      setBackendConnected(isHealthy);
+      if (isHealthy) {
+        console.log('✅ Backend connected');
+      } else {
+        console.warn('⚠️ Backend not available (running in offline mode)');
+      }
+    });
+
     return () => {
       // Cleanup on unmount
       audioService.cleanup();
@@ -67,6 +80,18 @@ export default function App() {
         audioService.startAudioLevelMonitoring((level) => {
           setAudioLevel(level);
         }, 100);
+        
+        // Send initial state to backend
+        if (backendConnected) {
+          const device = devices.find(d => d.deviceId === audioService.getCurrentDeviceId());
+          updateUserState(
+            userId,
+            false,
+            audioService.getCurrentDeviceId(),
+            device?.label || null,
+            'default-room'
+          );
+        }
         
         setCurrentScreen('meeting');
       } else {
@@ -117,6 +142,15 @@ export default function App() {
         setAudioLevel(level);
       }, 100);
       
+      // Get device label
+      const device = availableDevices.find(d => d.deviceId === deviceId);
+      const deviceLabel = device?.label || null;
+      
+      // Send device update to backend
+      if (backendConnected) {
+        updateDevice(userId, deviceId, deviceLabel);
+      }
+      
       console.log('✅ Microphone switched successfully');
     } else {
       console.error('❌ Failed to switch microphone');
@@ -144,6 +178,11 @@ export default function App() {
       setMicLocked(true);
       setCurrentScreen('muted');
       
+      // Send state to backend
+      if (backendConnected) {
+        updateMuteStatus(userId, true);
+      }
+      
       // Verify mute after a short delay
       setTimeout(() => {
         const isVerified = audioService.verifyMuteState();
@@ -161,6 +200,11 @@ export default function App() {
       setShowBanner(true);
       setCurrentScreen('unmuted-banner');
       
+      // Send state to backend
+      if (backendConnected) {
+        updateMuteStatus(userId, false);
+      }
+      
       // Auto-hide banner after 3 seconds
       setTimeout(() => {
         setShowBanner(false);
@@ -173,6 +217,11 @@ export default function App() {
       setMicMuted(true);
       setMicLocked(true);
       setCurrentScreen('muted');
+      
+      // Send state to backend
+      if (backendConnected) {
+        updateMuteStatus(userId, true);
+      }
       
       // Verify mute after a short delay
       setTimeout(() => {
@@ -338,8 +387,18 @@ export default function App() {
       {renderCurrentScreen()}
       
       {/* Developer Controls - for testing */}
-      <div className="fixed bottom-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg z-50 text-white text-sm">
-        <div className="mb-2 font-semibold">Dev Controls:</div>
+      <div className="fixed bottom-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg z-50 text-white text-sm max-w-xs">
+        <div className="mb-2 font-semibold flex items-center justify-between">
+          <span>Dev Controls</span>
+          <span className={`text-xs ${backendConnected ? 'text-green-400' : 'text-gray-500'}`}>
+            {backendConnected ? '● API' : '○ Offline'}
+          </span>
+        </div>
+        {userId && (
+          <div className="text-xs text-gray-400 mb-2 truncate">
+            User: {userId}
+          </div>
+        )}
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded transition-colors">
           <input
             type="checkbox"

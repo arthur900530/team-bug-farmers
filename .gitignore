@@ -4,6 +4,11 @@ node_modules/
 .pnp
 .pnp.js
 
+# Backend database
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
 # Build output
 dist/
 dist-ssr/
