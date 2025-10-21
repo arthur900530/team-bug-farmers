@@ -36,10 +36,14 @@ graph TB
             MuteControl[Mute/Unmute Control]
             LevelMonitor[Audio Level Monitor]
             Verification[Mute Verification]
+            DeviceSwitching[Device Switching]
+            DeviceEnum[Device Enumeration]
             
             AudioService --> MuteControl
             AudioService --> LevelMonitor
             AudioService --> Verification
+            AudioService --> DeviceSwitching
+            AudioService --> DeviceEnum
         end
         
         subgraph "Browser APIs"
@@ -147,6 +151,8 @@ graph LR
     App -->|initialize| AudioSvc
     App -->|mute/unmute| AudioSvc
     App -->|getAudioLevel| AudioSvc
+    App -->|switchMicrophone| AudioSvc
+    App -->|getAudioDevices| AudioSvc
     
     AudioSvc -->|getUserMedia| Navigator
     AudioSvc -->|createAnalyser| WebAudio
@@ -228,6 +234,21 @@ sequenceDiagram
         AS-->>App: callback(level)
         App-->>UI: Update audio bar
     end
+    
+    Note over U,HW: Device Switching
+    U->>UI: Select different microphone
+    UI->>App: handleMicrophoneSwitch(deviceId)
+    App->>AS: switchMicrophone(deviceId)
+    AS->>AS: Store mute state
+    AS->>Browser: Stop current stream
+    AS->>Browser: getUserMedia(new deviceId)
+    Browser->>HW: Switch to new device
+    HW-->>Browser: New audio stream
+    Browser-->>AS: New MediaStream
+    AS->>AS: Restore mute state
+    AS-->>App: Switch complete
+    App->>AS: Restart monitoring
+    App-->>UI: Update device selector
 ```
 
 ---
@@ -243,6 +264,9 @@ graph TD
         GetLevel[getAudioLevel Method]
         Monitor[startAudioLevelMonitoring]
         Verify[verifyMuteState Method]
+        SwitchDevice[switchMicrophone Method]
+        GetDevices[getAudioDevices Method]
+        GetCurrentDevice[getCurrentDeviceId Method]
         Cleanup[cleanup Method]
         
         subgraph "Internal State"
@@ -251,6 +275,7 @@ graph TD
             Analyser[analyser: AnalyserNode]
             Mic[microphone: MediaStreamAudioSourceNode]
             MutedFlag[isMuted: boolean]
+            CurrentDevice[currentDeviceId: string | null]
         end
     end
     
@@ -284,6 +309,19 @@ graph TD
     Verify -->|uses| GetLevel
     Verify -->|checks| MutedFlag
     
+    SwitchDevice -->|stores| MutedFlag
+    SwitchDevice -->|updates| CurrentDevice
+    SwitchDevice -->|stops| Stream
+    SwitchDevice -->|calls| Init
+    SwitchDevice -->|restores| MutedFlag
+    
+    GetDevices -->|calls| GUM
+    GetDevices -->|enumerates| Browser[Browser MediaDevices API]
+    
+    GetCurrentDevice -->|reads| CurrentDevice
+    
+    Init -->|stores| CurrentDevice
+    
     Cleanup -->|closes| Context
     Cleanup -->|stops tracks| Stream
     Cleanup -->|disconnects| Mic
@@ -293,8 +331,8 @@ graph TD
     classDef state fill:#FFE66D,stroke:#333,stroke-width:2px
     classDef api fill:#FF6B6B,stroke:#333,stroke-width:2px
     
-    class Init,Mute,Unmute,GetLevel,Monitor,Verify,Cleanup method
-    class Context,Stream,Analyser,Mic,MutedFlag state
+    class Init,Mute,Unmute,GetLevel,Monitor,Verify,SwitchDevice,GetDevices,GetCurrentDevice,Cleanup method
+    class Context,Stream,Analyser,Mic,MutedFlag,CurrentDevice state
     class AC,GUM,AN,MSN api
 ```
 
@@ -641,17 +679,26 @@ UI Components → App State → Audio Service → Browser APIs → Hardware
 - Permission denied → Show error modal
 - Device unavailable → Show device error
 - Initialization failed → Graceful degradation
+- Device switch failure → Revert to previous state
 
 ### 5. **Resource Management**
 - Cleanup on component unmount
 - Stop audio monitoring when not needed
 - Release media streams properly
 - Close audio contexts
+- Proper cleanup during device switching
 
 ### 6. **Real-time Updates**
 - Audio levels monitored every 100ms
 - React state updates trigger UI re-renders
 - Visual feedback for all audio changes
+- Seamless device transitions
+
+### 7. **Device Management** 🆕
+- Dynamic device enumeration
+- Real-time device switching
+- State preservation across switches
+- Automatic reconnection after device change
 
 ---
 
@@ -665,4 +712,54 @@ UI Components → App State → Audio Service → Browser APIs → Hardware
 | HTTPS Required | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
 
 **Note:** localhost is allowed without HTTPS for development.
+
+---
+
+## 🎯 Feature Status: Real vs Mocked
+
+### **Real Features:**
+- ✅ **Microphone Access**: REAL (Web Audio API)
+- ✅ **Mute/Unmute**: REAL (track.enabled control)
+- ✅ **Audio Levels**: REAL (frequency analysis)
+- ✅ **Device Enumeration**: REAL (MediaDevices API) 🆕
+- ✅ **Device Switching**: REAL (getUserMedia with deviceId) 🆕
+- ✅ **Mute Verification**: REAL (actual audio analysis)
+- ✅ **State Preservation**: REAL (mute state across device switches) 🆕
+
+### **Still Mocked:**
+- ❌ **Video**: Still mocked (no camera access)
+- ❌ **Meeting Connection**: Still mocked (no WebRTC)
+- ❌ **Other Participants**: Still mocked (no peer connections)
+- ❌ **Backend Server**: None (frontend only)
+
+---
+
+## 🆕 Recent Updates
+
+### **Microphone Device Switching (Latest)**
+
+Added comprehensive device switching capabilities:
+
+**New Methods:**
+- `switchMicrophone(deviceId)` - Switch between devices
+- `getAudioDevices()` - List available microphones
+- `getCurrentDeviceId()` - Get active device
+
+**Features:**
+- Real-time device switching without disconnection
+- Mute state preservation across switches
+- Automatic audio monitoring reconnection
+- Device selector in Dev Controls panel
+- Graceful error handling
+
+**UI Changes:**
+- Dropdown selector showing all available microphones
+- Current device pre-selected
+- Visual device labels or IDs
+- Integrated into Dev Controls panel
+
+**Documentation:**
+- See `MICROPHONE_SWITCHING.md` for complete guide
+- Updated `src/services/README.md` with API docs
+- Sequence diagrams and usage examples included
 
