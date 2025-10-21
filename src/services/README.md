@@ -9,6 +9,7 @@ Simple implementation of real microphone mute/unmute functionality using Web Aud
 ✅ **Audio Level Monitoring** - Real-time audio level detection (0-100%)  
 ✅ **Mute Verification** - Checks if hardware state matches software state  
 ✅ **Device Enumeration** - Lists available audio input devices  
+✅ **Device Switching** - Switch between multiple microphones in real-time  
 
 ## Usage
 
@@ -32,6 +33,15 @@ const level = audioService.getAudioLevel();
 
 // Check if muted
 const isMuted = audioService.getMuteState();
+
+// Get list of available microphones
+const devices = await audioService.getAudioDevices();
+
+// Get current device ID
+const currentDevice = audioService.getCurrentDeviceId();
+
+// Switch to a different microphone
+const success = await audioService.switchMicrophone(deviceId);
 
 // Monitor audio levels in real-time
 audioService.startAudioLevelMonitoring((level) => {
@@ -85,11 +95,40 @@ The app requires microphone permission. Users will see a browser prompt:
 - **Monitoring Frequency**: 100ms intervals (10x per second)
 - **Silence Threshold**: 5% of max volume
 
+## Device Switching
+
+The service supports switching between multiple microphones without disconnecting from the meeting:
+
+```typescript
+// Get available devices
+const devices = await audioService.getAudioDevices();
+console.log(devices); // Array of MediaDeviceInfo objects
+
+// Display device selector
+devices.forEach(device => {
+  console.log(`${device.label} (${device.deviceId})`);
+});
+
+// Switch to a different device
+const success = await audioService.switchMicrophone(deviceId);
+
+if (success) {
+  console.log('Switched to new microphone!');
+  // Mute state is preserved
+  // Audio monitoring continues automatically
+}
+```
+
+**Features:**
+- Preserves mute state when switching
+- Seamless transition (no meeting interruption)
+- Automatic reconnection to audio monitoring
+- Handles device errors gracefully
+
 ## Limitations
 
 - Frontend-only (no backend server)
 - No audio recording/streaming
 - No peer-to-peer communication (WebRTC would be needed)
-- Single microphone input only
 - Requires HTTPS in production (browser security requirement)
 

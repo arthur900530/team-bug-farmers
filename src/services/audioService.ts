@@ -10,23 +10,41 @@ class AudioService {
   private microphone: MediaStreamAudioSourceNode | null = null;
   private isMuted: boolean = false;
   private audioLevelCheckInterval: number | null = null;
+  private currentDeviceId: string | null = null;
 
   /**
    * Initialize and request microphone access
+   * @param deviceId Optional device ID to use specific microphone
    */
-  async initialize(): Promise<boolean> {
+  async initialize(deviceId?: string): Promise<boolean> {
     try {
       // Request microphone permission
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      const constraints: MediaStreamConstraints = {
+        audio: deviceId
+          ? {
+              deviceId: { exact: deviceId },
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            }
+          : {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+      };
+
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Store the current device ID
+      const audioTrack = this.mediaStream.getAudioTracks()[0];
+      this.currentDeviceId = audioTrack.getSettings().deviceId || null;
 
       // Create audio context for analysis
-      this.audioContext = new AudioContext();
+      if (!this.audioContext) {
+        this.audioContext = new AudioContext();
+      }
+      
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.fftSize = 256;
 
@@ -35,6 +53,7 @@ class AudioService {
       this.microphone.connect(this.analyser);
 
       console.log('✅ Microphone initialized successfully');
+      console.log(`🎤 Using device: ${audioTrack.label || 'Default'}`);
       return true;
     } catch (error) {
       console.error('❌ Failed to initialize microphone:', error);
@@ -170,6 +189,65 @@ class AudioService {
     } catch (error) {
       console.error('Failed to enumerate devices:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get the currently active device ID
+   */
+  getCurrentDeviceId(): string | null {
+    return this.currentDeviceId;
+  }
+
+  /**
+   * Switch to a different microphone device
+   * @param deviceId The device ID to switch to
+   */
+  async switchMicrophone(deviceId: string): Promise<boolean> {
+    try {
+      console.log(`🔄 Switching to device: ${deviceId}`);
+
+      // Store current mute state
+      const wasMuted = this.isMuted;
+
+      // Stop current monitoring
+      const wasMonitoring = this.audioLevelCheckInterval !== null;
+      this.stopAudioLevelMonitoring();
+
+      // Disconnect and stop current stream
+      if (this.microphone) {
+        this.microphone.disconnect();
+        this.microphone = null;
+      }
+
+      if (this.mediaStream) {
+        this.mediaStream.getTracks().forEach(track => track.stop());
+        this.mediaStream = null;
+      }
+
+      // Initialize with new device
+      const success = await this.initialize(deviceId);
+
+      if (success) {
+        // Restore mute state
+        if (wasMuted) {
+          this.mute();
+        }
+
+        // Restart monitoring if it was active
+        if (wasMonitoring) {
+          // The monitoring will be restarted by the caller
+        }
+
+        console.log('✅ Successfully switched microphone');
+        return true;
+      } else {
+        console.error('❌ Failed to switch microphone');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error switching microphone:', error);
+      return false;
     }
   }
 

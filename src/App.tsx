@@ -31,6 +31,8 @@ export default function App() {
   const [audioDeviceConnected, setAudioDeviceConnected] = useState(true);
   const [audioInitialized, setAudioInitialized] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
+  const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
 
   // Initialize audio service on component mount
   useEffect(() => {
@@ -56,6 +58,11 @@ export default function App() {
         setAudioInitialized(true);
         setMicMuted(false);
         
+        // Get available audio devices
+        const devices = await audioService.getAudioDevices();
+        setAvailableDevices(devices);
+        setCurrentDeviceId(audioService.getCurrentDeviceId());
+        
         // Start monitoring audio levels for verification
         audioService.startAudioLevelMonitoring((level) => {
           setAudioLevel(level);
@@ -76,6 +83,11 @@ export default function App() {
       setAudioInitialized(true);
       setMicMuted(false);
       
+      // Get available audio devices
+      const devices = await audioService.getAudioDevices();
+      setAvailableDevices(devices);
+      setCurrentDeviceId(audioService.getCurrentDeviceId());
+      
       // Start monitoring audio levels
       audioService.startAudioLevelMonitoring((level) => {
         setAudioLevel(level);
@@ -83,6 +95,31 @@ export default function App() {
       
       setCurrentScreen('meeting');
     } else {
+      setAudioDeviceConnected(false);
+      setCurrentScreen('audio-device-error');
+    }
+  };
+
+  const handleMicrophoneSwitch = async (deviceId: string) => {
+    if (!audioInitialized) {
+      console.warn('Audio not initialized yet');
+      return;
+    }
+
+    console.log('Switching to device:', deviceId);
+    const success = await audioService.switchMicrophone(deviceId);
+    
+    if (success) {
+      setCurrentDeviceId(deviceId);
+      
+      // Restart audio level monitoring
+      audioService.startAudioLevelMonitoring((level) => {
+        setAudioLevel(level);
+      }, 100);
+      
+      console.log('✅ Microphone switched successfully');
+    } else {
+      console.error('❌ Failed to switch microphone');
       setAudioDeviceConnected(false);
       setCurrentScreen('audio-device-error');
     }
@@ -315,10 +352,10 @@ export default function App() {
         {audioInitialized && (
           <div className="mt-3 pt-3 border-t border-gray-700">
             <div className="mb-1 text-xs text-gray-400">Audio Status:</div>
-            <div className="text-xs">
+            <div className="text-xs space-y-2">
               <div>Muted: {micMuted ? '🔇 Yes' : '🎤 No'}</div>
               <div>Level: {audioLevel}%</div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2">
                 <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
                   <div 
                     className="bg-green-500 h-full transition-all duration-100"
@@ -326,6 +363,25 @@ export default function App() {
                   />
                 </div>
               </div>
+              
+              {availableDevices.length > 0 && (
+                <div className="pt-2 border-t border-gray-700">
+                  <label className="block mb-1 text-xs text-gray-400">
+                    Microphone:
+                  </label>
+                  <select
+                    value={currentDeviceId || ''}
+                    onChange={(e) => handleMicrophoneSwitch(e.target.value)}
+                    className="w-full text-xs bg-gray-700 text-white rounded px-2 py-1 border border-gray-600 hover:bg-gray-600 cursor-pointer"
+                  >
+                    {availableDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Microphone ${device.deviceId.substring(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         )}
