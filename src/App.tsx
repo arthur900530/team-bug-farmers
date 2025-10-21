@@ -7,6 +7,7 @@ import { MeetingView } from './components/MeetingView';
 import { AudioSettings } from './components/AudioSettings';
 import { AllSettings } from './components/AllSettings';
 import { ScreenShareSettings } from './components/ScreenShareSettings';
+import { audioService } from './services/audioService';
 
 type Screen = 
   | 'join' 
@@ -28,40 +29,96 @@ export default function App() {
   const [micLocked, setMicLocked] = useState(false);
   const [hasTriedConnecting, setHasTriedConnecting] = useState(false);
   const [audioDeviceConnected, setAudioDeviceConnected] = useState(true);
+  const [audioInitialized, setAudioInitialized] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+
+  // Initialize audio service on component mount
+  useEffect(() => {
+    return () => {
+      // Cleanup on unmount
+      audioService.cleanup();
+    };
+  }, []);
 
   const navigateToScreen = (screen: Screen) => {
     setCurrentScreen(screen);
   };
 
-  const handleJoinMeeting = () => {
-    // First attempt always fails
+  const handleJoinMeeting = async () => {
+    // First attempt always fails (simulated connection error)
     if (!hasTriedConnecting) {
       setCurrentScreen('connection-error');
       setHasTriedConnecting(true);
     } else {
-      // Second attempt succeeds
-      setCurrentScreen('meeting');
+      // Second attempt succeeds - initialize real microphone
+      const initialized = await audioService.initialize();
+      if (initialized) {
+        setAudioInitialized(true);
+        setMicMuted(false);
+        
+        // Start monitoring audio levels for verification
+        audioService.startAudioLevelMonitoring((level) => {
+          setAudioLevel(level);
+        }, 100);
+        
+        setCurrentScreen('meeting');
+      } else {
+        setAudioDeviceConnected(false);
+        setCurrentScreen('audio-device-error');
+      }
     }
   };
 
-  const handleRetryConnection = () => {
-    // Retry succeeds and goes to meeting
-    setCurrentScreen('meeting');
+  const handleRetryConnection = async () => {
+    // Retry succeeds - initialize microphone
+    const initialized = await audioService.initialize();
+    if (initialized) {
+      setAudioInitialized(true);
+      setMicMuted(false);
+      
+      // Start monitoring audio levels
+      audioService.startAudioLevelMonitoring((level) => {
+        setAudioLevel(level);
+      }, 100);
+      
+      setCurrentScreen('meeting');
+    } else {
+      setAudioDeviceConnected(false);
+      setCurrentScreen('audio-device-error');
+    }
   };
 
   const handleMicToggle = () => {
+    if (!audioInitialized) {
+      console.warn('Audio not initialized yet');
+      return;
+    }
+
+    // Check if audio device is connected
+    if (!audioDeviceConnected) {
+      setCurrentScreen('audio-device-error');
+      return;
+    }
+
     if (currentScreen === 'meeting') {
+      // Mute the microphone using real audio service
+      audioService.mute();
       setMicMuted(true);
       setMicLocked(true);
       setCurrentScreen('muted');
-    } else if (currentScreen === 'muted') {
-      // Check if audio device is connected
-      if (!audioDeviceConnected) {
-        setCurrentScreen('audio-device-error');
-        return;
-      }
       
-      // Simulate headphone malfunction - unmute and show banner
+      // Verify mute after a short delay
+      setTimeout(() => {
+        const isVerified = audioService.verifyMuteState();
+        if (!isVerified) {
+          setShowBanner(true);
+          setTimeout(() => setShowBanner(false), 3000);
+        }
+      }, 500);
+      
+    } else if (currentScreen === 'muted') {
+      // Unmute the microphone using real audio service
+      audioService.unmute();
       setMicMuted(false);
       setMicLocked(false);
       setShowBanner(true);
@@ -72,16 +129,22 @@ export default function App() {
         setShowBanner(false);
         setCurrentScreen('meeting-clean');
       }, 3000);
-    } else if (currentScreen === 'meeting-clean') {
-      // Check if audio device is connected
-      if (!audioDeviceConnected) {
-        setCurrentScreen('audio-device-error');
-        return;
-      }
       
+    } else if (currentScreen === 'meeting-clean') {
+      // Mute the microphone
+      audioService.mute();
       setMicMuted(true);
       setMicLocked(true);
       setCurrentScreen('muted');
+      
+      // Verify mute after a short delay
+      setTimeout(() => {
+        const isVerified = audioService.verifyMuteState();
+        if (!isVerified) {
+          setShowBanner(true);
+          setTimeout(() => setShowBanner(false), 3000);
+        }
+      }, 500);
     }
   };
 
@@ -238,8 +301,8 @@ export default function App() {
       {renderCurrentScreen()}
       
       {/* Developer Controls - for testing */}
-      <div className="fixed bottom-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg z-50 text-white">
-        <div className="mb-2">Dev Controls:</div>
+      <div className="fixed bottom-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg z-50 text-white text-sm">
+        <div className="mb-2 font-semibold">Dev Controls:</div>
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded transition-colors">
           <input
             type="checkbox"
@@ -249,6 +312,23 @@ export default function App() {
           />
           <span>Audio Device Connected</span>
         </label>
+        {audioInitialized && (
+          <div className="mt-3 pt-3 border-t border-gray-700">
+            <div className="mb-1 text-xs text-gray-400">Audio Status:</div>
+            <div className="text-xs">
+              <div>Muted: {micMuted ? '🔇 Yes' : '🎤 No'}</div>
+              <div>Level: {audioLevel}%</div>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="bg-green-500 h-full transition-all duration-100"
+                    style={{ width: `${audioLevel}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
