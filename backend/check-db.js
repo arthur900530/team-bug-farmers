@@ -22,6 +22,7 @@ try {
   const users = db.prepare(`
     SELECT 
       userId,
+      username,
       isMuted,
       deviceId,
       deviceLabel,
@@ -39,7 +40,8 @@ try {
     console.log(`Found ${users.length} user(s):\n`);
     
     users.forEach((user, index) => {
-      console.log(`${index + 1}. User: ${user.userId}`);
+      console.log(`${index + 1}. 👤 ${user.username || 'Unknown'}`);
+      console.log(`   User ID: ${user.userId}`);
       console.log(`   Status: ${user.isMuted ? '🔇 Muted' : '🎤 Unmuted'}`);
       console.log(`   Device: ${user.deviceLabel || user.deviceId || 'N/A'}`);
       console.log(`   Room: ${user.roomId || 'N/A'}`);

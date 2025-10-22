@@ -7,6 +7,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 interface UserState {
   userId: string;
+  username: string;
   isMuted: boolean;
   deviceId: string | null;
   deviceLabel: string | null;
@@ -27,6 +28,7 @@ interface ApiResponse<T> {
  */
 export async function updateUserState(
   userId: string,
+  username: string,
   isMuted: boolean,
   deviceId: string | null,
   deviceLabel: string | null,
@@ -39,6 +41,7 @@ export async function updateUserState(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        username,
         isMuted,
         deviceId,
         deviceLabel,
