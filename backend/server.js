@@ -1,35 +1,157 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import Database from 'better-sqlite3';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { initDatabase, getUserState, createOrUpdateUserState, getAllUserStates, deleteUserState } from './database.js';
+import { metricsMiddleware, getMetricsHandler } from './metrics.js';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const db = new Database(join(__dirname, 'audio-states.db'));
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
+// ==================== Middleware ====================
+
+// CORS - Allow frontend to communicate with backend
 app.use(cors());
 app.use(express.json());
 
-// Request logging middleware
+// ==================== SRE: Structured Request Logging ====================
+// Purpose: Track API performance, error rates, and usage patterns
+// Output: JSON format for easy parsing by log aggregation tools (CloudWatch, ELK, etc.)
+// Metrics tracked: Response time, status codes, user activity, endpoint usage
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).substr(2, 9); // Unique request ID for tracing
+  
+  // Attach request ID to request object for use in other middleware
+  req.requestId = requestId;
+  
+  // Log when response is finished
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    
+    // Structured JSON log entry
+    const logEntry = {
+      // Timestamp in ISO format for consistency
+      timestamp: new Date().toISOString(),
+      
+      // Request identification
+      requestId: requestId,
+      method: req.method,
+      path: req.path,
+      url: req.url,
+      
+      // Response information
+      statusCode: res.statusCode,
+      statusText: res.statusCode >= 200 && res.statusCode < 300 ? 'success' :
+                  res.statusCode >= 400 && res.statusCode < 500 ? 'client_error' :
+                  res.statusCode >= 500 ? 'server_error' : 'unknown',
+      
+      // Performance metrics
+      duration: duration, // milliseconds
+      durationSeconds: (duration / 1000).toFixed(3), // seconds with 3 decimal places
+      
+      // User tracking (if available)
+      userId: req.params.userId || req.body?.userId || null,
+      roomId: req.params.roomId || req.body?.roomId || null,
+      
+      // Client information
+      userAgent: req.get('user-agent'),
+      ip: req.ip || req.connection.remoteAddress,
+      
+      // Request size (useful for monitoring large payloads)
+      contentLength: req.get('content-length') || 0,
+      
+      // SRE Alert Flags
+      // These help quickly identify issues in log aggregation systems
+      isError: res.statusCode >= 400,
+      isSlowRequest: duration > 1000, // Flag requests slower than 1 second
+      isCriticalEndpoint: req.path.includes('/mute') || req.path.includes('/device') // User Story endpoints
+    };
+    
+    // Log to console in JSON format
+    // In production, this would be sent to CloudWatch Logs or similar
+    console.log(JSON.stringify(logEntry));
+    
+    // Additional error logging for failed requests
+    if (res.statusCode >= 400) {
+      console.error(JSON.stringify({
+        level: 'ERROR',
+        requestId: requestId,
+        message: 'Request failed',
+        statusCode: res.statusCode,
+        path: req.path,
+        method: req.method
+      }));
+    }
+  });
+  
   next();
 });
+
+// ==================== SRE: Metrics Collection ====================
+// Track API performance, error rates, and user activity
+app.use(metricsMiddleware);
 
 // Initialize database
 initDatabase();
 
 // ==================== API Routes ====================
 
-// Health check
+// SRE: Metrics endpoint - View system performance metrics
+// Returns: API response times, error rates, concurrent users, system resources
+app.get('/api/metrics', getMetricsHandler);
+
+// Enhanced health check endpoint
+// Purpose: Monitors server, database, and resource health
+// Used by: AWS health checks, monitoring systems, deployment verification
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'Server is running',
-    timestamp: new Date().toISOString()
-  });
+  try {
+    // Check database connectivity by running a simple query
+    const dbCheck = db.prepare('SELECT 1 as health').get();
+    
+    // Gather system metrics
+    const uptime = process.uptime(); // Seconds since server started
+    const memory = process.memoryUsage();
+    
+    res.json({ 
+      status: 'ok', 
+      message: 'Server is running',
+      timestamp: new Date().toISOString(),
+      uptime: {
+        seconds: Math.floor(uptime),
+        formatted: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`
+      },
+      database: {
+        status: dbCheck ? 'connected' : 'error',
+        type: 'SQLite',
+        mode: 'WAL' // Write-Ahead Logging for better concurrency
+      },
+      memory: {
+        heapUsed: `${Math.round(memory.heapUsed / 1024 / 1024)} MB`,
+        heapTotal: `${Math.round(memory.heapTotal / 1024 / 1024)} MB`,
+        rss: `${Math.round(memory.rss / 1024 / 1024)} MB`, // Resident Set Size
+        external: `${Math.round(memory.external / 1024 / 1024)} MB`
+      },
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    // If health check fails, return 503 Service Unavailable
+    console.error('Health check failed:', error);
+    res.status(503).json({
+      status: 'error',
+      message: 'Service unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Get all users states
@@ -250,13 +372,129 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log('==========================================');
   console.log('🚀 Zoom Demo Backend Server');
   console.log('==========================================');
   console.log(`✅ Server running on http://localhost:${PORT}`);
   console.log(`✅ API available at http://localhost:${PORT}/api`);
   console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
+  console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('==========================================');
+});
+
+// ==================== SRE: Graceful Shutdown ====================
+// Purpose: Handle server shutdown gracefully to prevent data loss and connection errors
+// Triggered by: SIGTERM (AWS ECS/Fargate), SIGINT (Ctrl+C), process crashes
+// 
+// What happens during graceful shutdown:
+// 1. Stop accepting new connections
+// 2. Finish processing existing requests (with timeout)
+// 3. Close database connections cleanly
+// 4. Exit with proper status code
+
+let isShuttingDown = false;
+
+function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    console.log('Already shutting down, forcing exit...');
+    process.exit(1);
+  }
+  
+  isShuttingDown = true;
+  
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: 'shutdown_initiated',
+    signal: signal,
+    message: 'Graceful shutdown initiated'
+  }));
+  
+  // Stop accepting new connections
+  server.close((err) => {
+    if (err) {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'ERROR',
+        event: 'shutdown_error',
+        message: 'Error during server shutdown',
+        error: err.message
+      }));
+      process.exit(1);
+    }
+    
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: 'server_closed',
+      message: 'HTTP server closed, no longer accepting connections'
+    }));
+    
+    // Close database connection
+    try {
+      db.close();
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'database_closed',
+        message: 'Database connection closed cleanly'
+      }));
+    } catch (err) {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'ERROR',
+        event: 'database_close_error',
+        error: err.message
+      }));
+    }
+    
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: 'shutdown_complete',
+      message: 'Graceful shutdown complete'
+    }));
+    
+    process.exit(0);
+  });
+  
+  // Force shutdown after 10 seconds if graceful shutdown hangs
+  setTimeout(() => {
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      event: 'shutdown_timeout',
+      message: 'Graceful shutdown timeout - forcing exit'
+    }));
+    process.exit(1);
+  }, 10000);
+}
+
+// Listen for shutdown signals
+// SIGTERM: Standard termination signal (AWS ECS, Kubernetes, etc.)
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// SIGINT: Interrupt signal (Ctrl+C in terminal)
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Uncaught exceptions - log and exit
+process.on('uncaughtException', (error) => {
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'FATAL',
+    event: 'uncaught_exception',
+    message: error.message,
+    stack: error.stack
+  }));
+  gracefulShutdown('uncaughtException');
+});
+
+// Unhandled promise rejections - log and exit
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'FATAL',
+    event: 'unhandled_rejection',
+    reason: reason,
+    promise: promise
+  }));
+  gracefulShutdown('unhandledRejection');
 });
 
