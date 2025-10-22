@@ -106,3 +106,12 @@ tmp/
 # Misc
 *.pem
 .certificates
+
+# Docker volumes and logs
+*.log
+
+# NVM temporary files
+.zshrc.nvm
+
+# Test server (mock database version)
+backend/server-test.js
