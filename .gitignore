@@ -107,8 +107,8 @@ tmp/
 *.pem
 .certificates
 
-# Docker volumes and logs
-*.log
+# Additional logs
+# (already covered by earlier *.log entries, but kept for clarity)
 
 # NVM temporary files
 .zshrc.nvm
