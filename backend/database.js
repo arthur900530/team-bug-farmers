@@ -18,6 +18,7 @@ export function initDatabase() {
   const schema = `
     CREATE TABLE IF NOT EXISTS user_states (
       userId TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
       isMuted INTEGER NOT NULL DEFAULT 0,
       deviceId TEXT,
       deviceLabel TEXT,
@@ -28,9 +29,19 @@ export function initDatabase() {
     
     CREATE INDEX IF NOT EXISTS idx_roomId ON user_states(roomId);
     CREATE INDEX IF NOT EXISTS idx_lastUpdated ON user_states(lastUpdated);
+    CREATE INDEX IF NOT EXISTS idx_username ON user_states(username);
   `;
   
   db.exec(schema);
+  
+  // Add username column if it doesn't exist (for existing databases)
+  try {
+    db.exec(`ALTER TABLE user_states ADD COLUMN username TEXT`);
+    console.log('✅ Added username column to existing database');
+  } catch (error) {
+    // Column already exists or table is new
+  }
+  
   console.log('✅ Database initialized');
 }
 
@@ -41,6 +52,7 @@ export function getUserState(userId) {
   const stmt = db.prepare(`
     SELECT 
       userId,
+      username,
       isMuted,
       deviceId,
       deviceLabel,
@@ -57,6 +69,7 @@ export function getUserState(userId) {
   
   return {
     userId: row.userId,
+    username: row.username,
     isMuted: Boolean(row.isMuted),
     deviceId: row.deviceId,
     deviceLabel: row.deviceLabel,
@@ -73,6 +86,7 @@ export function getAllUserStates() {
   const stmt = db.prepare(`
     SELECT 
       userId,
+      username,
       isMuted,
       deviceId,
       deviceLabel,
@@ -87,6 +101,7 @@ export function getAllUserStates() {
   
   return rows.map(row => ({
     userId: row.userId,
+    username: row.username,
     isMuted: Boolean(row.isMuted),
     deviceId: row.deviceId,
     deviceLabel: row.deviceLabel,
@@ -99,13 +114,14 @@ export function getAllUserStates() {
 /**
  * Create or update user state
  */
-export function createOrUpdateUserState({ userId, isMuted, deviceId, deviceLabel, roomId }) {
+export function createOrUpdateUserState({ userId, username, isMuted, deviceId, deviceLabel, roomId }) {
   const now = new Date().toISOString();
   
   const stmt = db.prepare(`
-    INSERT INTO user_states (userId, isMuted, deviceId, deviceLabel, roomId, lastUpdated, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO user_states (userId, username, isMuted, deviceId, deviceLabel, roomId, lastUpdated, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(userId) DO UPDATE SET
+      username = excluded.username,
       isMuted = excluded.isMuted,
       deviceId = excluded.deviceId,
       deviceLabel = excluded.deviceLabel,
@@ -113,7 +129,7 @@ export function createOrUpdateUserState({ userId, isMuted, deviceId, deviceLabel
       lastUpdated = excluded.lastUpdated
   `);
   
-  stmt.run(userId, isMuted ? 1 : 0, deviceId, deviceLabel, roomId, now, now);
+  stmt.run(userId, username, isMuted ? 1 : 0, deviceId, deviceLabel, roomId, now, now);
   
   return getUserState(userId);
 }
@@ -134,6 +150,7 @@ export function getUsersByRoom(roomId) {
   const stmt = db.prepare(`
     SELECT 
       userId,
+      username,
       isMuted,
       deviceId,
       deviceLabel,
@@ -149,6 +166,7 @@ export function getUsersByRoom(roomId) {
   
   return rows.map(row => ({
     userId: row.userId,
+    username: row.username,
     isMuted: Boolean(row.isMuted),
     deviceId: row.deviceId,
     deviceLabel: row.deviceLabel,

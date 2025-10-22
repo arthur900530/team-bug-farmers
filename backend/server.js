@@ -202,7 +202,7 @@ app.get('/api/users/:userId', (req, res) => {
 app.post('/api/users/:userId/state', (req, res) => {
   try {
     const { userId } = req.params;
-    const { isMuted, deviceId, deviceLabel, roomId } = req.body;
+    const { username, isMuted, deviceId, deviceLabel, roomId } = req.body;
     
     // Validation
     if (typeof isMuted !== 'boolean') {
@@ -212,8 +212,16 @@ app.post('/api/users/:userId/state', (req, res) => {
       });
     }
     
+    if (!username || typeof username !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'username is required and must be a string'
+      });
+    }
+    
     const userState = createOrUpdateUserState({
       userId,
+      username,
       isMuted,
       deviceId: deviceId || null,
       deviceLabel: deviceLabel || null,
@@ -248,12 +256,20 @@ app.patch('/api/users/:userId/mute', (req, res) => {
     }
     
     const currentState = getUserState(userId);
+    if (!currentState) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found. Create user state first with POST /api/users/:userId/state'
+      });
+    }
+    
     const userState = createOrUpdateUserState({
       userId,
+      username: currentState.username,
       isMuted,
-      deviceId: currentState?.deviceId || null,
-      deviceLabel: currentState?.deviceLabel || null,
-      roomId: currentState?.roomId || null
+      deviceId: currentState.deviceId || null,
+      deviceLabel: currentState.deviceLabel || null,
+      roomId: currentState.roomId || null
     });
     
     res.json({
@@ -284,8 +300,16 @@ app.patch('/api/users/:userId/device', (req, res) => {
     }
     
     const currentState = getUserState(userId);
+    if (!currentState) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found. Create user state first with POST /api/users/:userId/state'
+      });
+    }
+    
     const userState = createOrUpdateUserState({
       userId,
+      username: currentState.username,
       isMuted: currentState?.isMuted || false,
       deviceId,
       deviceLabel: deviceLabel || null,

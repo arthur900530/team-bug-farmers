@@ -1,13 +1,14 @@
-import React from 'react';
-import { Mic, MicOff, Video, VideoOff, ChevronDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mic, MicOff, Video, VideoOff, ChevronDown, User } from 'lucide-react';
 import { WindowControls } from './common/WindowControls';
 
 interface JoinMeetingModalProps {
   micOn: boolean;
   cameraOn: boolean;
-  onJoin: () => void;
+  onJoin: (username: string) => void;
   onMicToggle: () => void;
   onCameraToggle: () => void;
+  defaultUsername?: string;
 }
 
 export function JoinMeetingModal({ 
@@ -15,8 +16,12 @@ export function JoinMeetingModal({
   cameraOn, 
   onJoin, 
   onMicToggle, 
-  onCameraToggle 
+  onCameraToggle,
+  defaultUsername = ''
 }: JoinMeetingModalProps) {
+  const [username, setUsername] = useState<string>(defaultUsername);
+  const [error, setError] = useState<string>('');
+
   const handleMicToggle = () => {
     try {
       onMicToggle();
@@ -35,10 +40,28 @@ export function JoinMeetingModal({
 
   const handleJoin = () => {
     try {
-      onJoin();
+      const trimmedUsername = username.trim();
+      if (!trimmedUsername) {
+        setError('Please enter your name');
+        return;
+      }
+      if (trimmedUsername.length < 2) {
+        setError('Name must be at least 2 characters');
+        return;
+      }
+      if (trimmedUsername.length > 30) {
+        setError('Name must be less than 30 characters');
+        return;
+      }
+      onJoin(trimmedUsername);
     } catch (error) {
       console.error('Error joining meeting:', error);
     }
+  };
+
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUsername(e.target.value);
+    if (error) setError('');
   };
 
   return (
@@ -47,7 +70,7 @@ export function JoinMeetingModal({
         {/* Window Controls */}
         <div className="flex items-center justify-between mb-4">
           <WindowControls showDots={true} />
-          <span className="text-gray-300">ntrappe@andrew.cmu.edu's Zoom Meeting</span>
+          <span className="text-gray-300">Join Meeting</span>
           <button 
             className="text-gray-400 hover:text-gray-200 hover:bg-gray-700 px-2 py-1 rounded transition-all"
             aria-label="More options"
@@ -56,10 +79,36 @@ export function JoinMeetingModal({
           </button>
         </div>
 
+        {/* Username Input */}
+        <div className="mb-4">
+          <label className="block text-gray-300 text-sm mb-2 font-medium">
+            Your Name
+          </label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={username}
+              onChange={handleUsernameChange}
+              placeholder="Enter your name"
+              className={`w-full pl-10 pr-4 py-2 bg-gray-700 text-white rounded border ${
+                error ? 'border-red-500' : 'border-gray-600'
+              } focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all`}
+              maxLength={30}
+              autoFocus
+            />
+          </div>
+          {error && (
+            <p className="text-red-400 text-xs mt-1">{error}</p>
+          )}
+        </div>
+
         {/* Video Preview Area */}
         <div className="bg-black rounded-lg mb-6 h-48 flex items-center justify-center relative">
           <div className="text-center">
-            <div className="text-white text-2xl mb-2">ntrappe@andrew...</div>
+            <div className="text-white text-2xl mb-2">
+              {username.trim() || 'Enter your name'}
+            </div>
           </div>
         </div>
 
@@ -103,9 +152,14 @@ export function JoinMeetingModal({
         {/* Join Button */}
         <button
           onClick={handleJoin}
-          className="w-full rounded transition-all duration-150 outline-none focus:ring-2 focus:ring-offset-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-500 hover:shadow-md active:bg-blue-700 focus:ring-blue-500 hover:shadow-lg text-lg"
+          disabled={!username.trim()}
+          className={`w-full rounded transition-all duration-150 outline-none focus:ring-2 focus:ring-offset-2 px-4 py-2 text-white text-lg ${
+            username.trim()
+              ? 'bg-blue-600 hover:bg-blue-500 hover:shadow-md active:bg-blue-700 focus:ring-blue-500 hover:shadow-lg cursor-pointer'
+              : 'bg-gray-600 cursor-not-allowed opacity-50'
+          }`}
         >
-          Join
+          Join Meeting
         </button>
 
         {/* Additional Options */}

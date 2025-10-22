@@ -7,6 +7,7 @@ interface MeetingViewProps {
   micLocked: boolean;
   showBanner: boolean;
   cameraOn: boolean;
+  username?: string;
   onMicToggle: () => void;
   onMicSettings: () => void;
 }
@@ -15,7 +16,8 @@ export function MeetingView({
   micMuted, 
   micLocked, 
   showBanner, 
-  cameraOn, 
+  cameraOn,
+  username = 'User',
   onMicToggle, 
   onMicSettings 
 }: MeetingViewProps) {
@@ -46,12 +48,12 @@ export function MeetingView({
       {/* Main Video Area */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-white text-4xl mb-4">ntrappe@andrew.cmu.edu</div>
+          <div className="text-white text-4xl mb-4">{username}</div>
         </div>
 
         {/* Participant Name in Bottom Left */}
         <div className="absolute bottom-24 left-4 text-white bg-black bg-opacity-50 px-2 py-1 rounded">
-          ntrappe@andrew.cmu.edu
+          {username}
         </div>
       </div>
 

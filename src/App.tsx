@@ -22,6 +22,36 @@ type Screen =
   | 'screen-share-settings'
   | 'audio-device-error';
 
+// Helper function to get or create userId from localStorage
+const getUserFromStorage = (): { userId: string; username: string } | null => {
+  try {
+    const stored = localStorage.getItem('zoomDemoUser');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error('Error reading user from localStorage:', error);
+  }
+  return null;
+};
+
+// Helper function to save userId to localStorage
+const saveUserToStorage = (userId: string, username: string): void => {
+  try {
+    localStorage.setItem('zoomDemoUser', JSON.stringify({ userId, username }));
+  } catch (error) {
+    console.error('Error saving user to localStorage:', error);
+  }
+};
+
+// Helper function to create userId from username
+const createUserId = (username: string): string => {
+  // Create a slug-like ID from username with a short random suffix for uniqueness
+  const slug = username.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 20);
+  const randomSuffix = Math.random().toString(36).substr(2, 6);
+  return `${slug}-${randomSuffix}`;
+};
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('join');
   const [micMuted, setMicMuted] = useState(false);
@@ -34,11 +64,20 @@ export default function App() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
-  const [userId] = useState<string>(() => `user-${Math.random().toString(36).substr(2, 9)}`);
+  const [userId, setUserId] = useState<string>('');
+  const [username, setUsername] = useState<string>('');
   const [backendConnected, setBackendConnected] = useState(false);
 
   // Initialize audio service on component mount
   useEffect(() => {
+    // Try to load user from localStorage
+    const storedUser = getUserFromStorage();
+    if (storedUser) {
+      setUserId(storedUser.userId);
+      setUsername(storedUser.username);
+      console.log(`👤 Welcome back, ${storedUser.username}!`);
+    }
+
     // Check backend connectivity
     checkBackendHealth().then(isHealthy => {
       setBackendConnected(isHealthy);
@@ -59,7 +98,30 @@ export default function App() {
     setCurrentScreen(screen);
   };
 
-  const handleJoinMeeting = async () => {
+  const handleJoinMeeting = async (inputUsername?: string) => {
+    // If username provided, this is the first join attempt
+    if (inputUsername) {
+      // Create or update user ID based on username
+      const newUserId = createUserId(inputUsername);
+      setUserId(newUserId);
+      setUsername(inputUsername);
+      saveUserToStorage(newUserId, inputUsername);
+      console.log(`👤 User created: ${inputUsername} (${newUserId})`);
+      
+      // Create user in database immediately
+      if (backendConnected) {
+        await updateUserState(
+          newUserId,
+          inputUsername,
+          false, // Not muted initially
+          null,  // No device yet
+          null,  // No device label yet
+          'default-room'
+        );
+        console.log('✅ User saved to database');
+      }
+    }
+
     // First attempt always fails (simulated connection error)
     if (!hasTriedConnecting) {
       setCurrentScreen('connection-error');
@@ -82,10 +144,11 @@ export default function App() {
         }, 100);
         
         // Send initial state to backend
-        if (backendConnected) {
+        if (backendConnected && userId && username) {
           const device = devices.find(d => d.deviceId === audioService.getCurrentDeviceId());
           updateUserState(
             userId,
+            username,
             false,
             audioService.getCurrentDeviceId(),
             device?.label || null,
@@ -275,6 +338,7 @@ export default function App() {
               micLocked={micLocked}
               showBanner={false}
               cameraOn={cameraOn}
+              username={username}
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
             />
@@ -294,6 +358,7 @@ export default function App() {
             micLocked={micLocked}
             showBanner={showBanner}
             cameraOn={cameraOn}
+            username={username}
             onMicToggle={handleMicToggle}
             onMicSettings={handleMicSettings}
           />
@@ -307,6 +372,7 @@ export default function App() {
               micLocked={micLocked}
               showBanner={false}
               cameraOn={cameraOn}
+              username={username}
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
             />
@@ -348,6 +414,7 @@ export default function App() {
               micLocked={micLocked}
               showBanner={false}
               cameraOn={cameraOn}
+              username={username}
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
             />
@@ -366,6 +433,7 @@ export default function App() {
               micLocked={micLocked}
               showBanner={false}
               cameraOn={cameraOn}
+              username={username}
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
             />
@@ -394,9 +462,9 @@ export default function App() {
             {backendConnected ? '● API' : '○ Offline'}
           </span>
         </div>
-        {userId && (
-          <div className="text-xs text-gray-400 mb-2 truncate">
-            User: {userId}
+        {username && (
+          <div className="text-xs text-gray-400 mb-2 truncate" title={`User ID: ${userId}`}>
+            👤 {username}
           </div>
         )}
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded transition-colors">
