@@ -44,8 +44,9 @@ The server follows a classic 3-tier architecture with clear separation between t
    - Request ID generation
 
 2. **Application Layer (Route Handlers)**
-   - Input validation
+   - Input validation (type checking, required fields)
    - Business logic coordination
+   - Database calls via database.js
    - Error handling
    - Response formatting
 
