@@ -181,6 +181,56 @@ curl -X PATCH http://localhost:3001/api/users/user123/device \
 
 ---
 
+### Update Mute Verification Status (User Story 1)
+```http
+PATCH /api/users/:userId/verify
+Content-Type: application/json
+
+{
+  "verifiedMuted": true
+}
+```
+
+**Purpose:** Report hardware verification result from frontend to backend. Separates user intent (`isMuted`) from confirmed hardware state (`verifiedMuted`).
+
+**Example:**
+```bash
+curl -X PATCH http://localhost:3001/api/users/user123/verify \
+  -H "Content-Type: application/json" \
+  -d '{"verifiedMuted": true}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Mute verification status updated",
+  "data": {
+    "userId": "user123",
+    "username": "John Doe",
+    "isMuted": true,
+    "verifiedMuted": true,
+    "deviceId": "abc123",
+    "deviceLabel": "Built-in Microphone",
+    "roomId": "room456",
+    "lastUpdated": "2025-10-23T...",
+    "createdAt": "2025-10-21T..."
+  }
+}
+```
+
+**Validation:**
+- `verifiedMuted` must be a boolean
+
+**Notes:**
+- Frontend performs hardware verification via Web Audio API
+- Checks if actual audio level is 0% when muted
+- `verifiedMuted=true`: Hardware confirmed silent
+- `verifiedMuted=false`: Audio still detected (potential leak)
+- `verifiedMuted=null`: Not yet verified
+
+---
+
 ### Delete User State
 ```http
 DELETE /api/users/:userId

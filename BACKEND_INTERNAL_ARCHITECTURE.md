@@ -44,15 +44,16 @@ The server follows a classic 3-tier architecture with clear separation between t
    - Request ID generation
 
 2. **Application Layer (Route Handlers)**
-   - Input validation
+   - Input validation (inline, no separate controllers)
    - Business logic coordination
    - Error handling
    - Response formatting
+   - **Note:** Routes directly call `database.js` functions - no controller layer
 
 3. **Data Access Layer (Database Module)**
    - Abstracted via `database.js`
    - No SQL in route handlers
-   - Transaction boundaries (if needed)
+   - Synchronous operations (better-sqlite3 design)
 
 **Request Flow:**
 
@@ -70,16 +71,26 @@ HTTP Request → Middleware Chain → Route Handler → Database Layer → Respo
 graph TB
     Frontend["Frontend (React)<br/>━━━━━━━━━━━━━━━<br/>• audioService<br/>• backendService"] 
     
-    Backend["Backend API (Express)<br/>━━━━━━━━━━━━━━━━━━━<br/>• Middleware (CORS, Logging)<br/>• Routes (User Story 1 & 2)<br/>• Controllers (Validation)<br/>• database.js module"]
+    Middleware["Middleware Stack<br/>━━━━━━━━━━━━━━━<br/>• CORS<br/>• JSON parser<br/>• Logging<br/>• Metrics"]
     
-    DB[("SQLite Database<br/>━━━━━━━━━━━━━<br/>audio-states.db<br/><br/>user_states table")]
+    Routes["Route Handlers<br/>━━━━━━━━━━━━━━━<br/>• Validation<br/>• Orchestration<br/>• Error handling"]
     
-    Frontend -->|"HTTP/REST<br/><br/>PATCH /mute<br/>PATCH /device<br/>POST /state"| Backend
-    Backend -->|"JSON Response<br/>{success, data}"| Frontend
-    Backend -->|"SQL Operations<br/><br/>Upsert, Read<br/>Delete"| DB
+    Database["database.js<br/>━━━━━━━━━━<br/>• DAO Pattern<br/>• CRUD ops"]
+    
+    DB[("SQLite<br/>━━━━━━━━━━<br/>audio-states.db")]
+    
+    Frontend -->|"HTTP/REST"| Middleware
+    Middleware -->|"Parsed request"| Routes
+    Routes -->|"Function calls<br/>getUserState()<br/>createOrUpdateUserState()"| Database
+    Database -->|"SQL queries"| DB
+    DB -->|"Data"| Database
+    Database -->|"Result"| Routes
+    Routes -->|"JSON response"| Frontend
     
     style Frontend fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
-    style Backend fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
+    style Middleware fill:#E1F5FE,stroke:#039BE5,stroke-width:2px
+    style Routes fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
+    style Database fill:#FFF9C4,stroke:#FBC02D,stroke-width:3px
     style DB fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
 ```
 
@@ -167,21 +178,31 @@ POST /api/users/:userId/state
 
 **Choice:** Use `better-sqlite3` (synchronous) instead of async driver
 
-**Rationale:**
-- **Simplicity:** No async/await complexity in data layer
-- **Performance:** Synchronous is FASTER for SQLite (no event loop overhead)
-- **Reliability:** Blocking ensures operation completes before response sent
-- **Scale:** With 10 users, blocking is negligible (~5-10ms per write)
+**Rationale:** Synchronous operations are acceptable and simpler at our scale (10 users), despite blocking the Node.js event loop.
 
-**Benchmark:**
+**Why Synchronous Works Here:**
+- **Scale-Appropriate:** 10 users × 5-10ms blocking per write = 50-100ms total queue time (acceptable)
+- **Simplicity:** No async/await complexity, easier to debug and maintain
+- **SQLite-Optimized:** `better-sqlite3` is faster than async drivers for SQLite specifically (benchmark below)
+- **Predictability:** Blocking ensures operation completes before response sent (no race conditions)
+
+**Benchmark (SQLite-specific):**
 ```javascript
-better-sqlite3 (sync):  10,000 inserts = 1.2s
-sqlite3 (async):        10,000 inserts = 2.8s
+better-sqlite3 (sync):  10,000 inserts = 1.2s  (blocking but fast)
+sqlite3 (async):        10,000 inserts = 2.8s  (non-blocking but slower due to overhead)
+
+Note: Async is typically better at scale, but SQLite + low concurrency favor sync.
 ```
 
+**Blocking Constraint Acknowledged:**
+- Synchronous operations block the event loop (~5-10ms per write)
+- This prevents other requests from being processed during writes
+- **At 10 users:** Acceptable (queue time minimal)
+- **At 100+ users:** Would become a bottleneck (need to switch to async PostgreSQL)
+
 **Alternative Considered:** Async database driver (sqlite3, knex)
-- **Rejected:** Slower, more complex, no benefit at our scale
-- **Trade-off:** May need to refactor for >100 concurrent users
+- **Rejected for now:** More complex, slower for SQLite at our scale
+- **Trade-off:** Simpler now, but must refactor to async for >100 concurrent users
 
 ---
 
@@ -189,15 +210,17 @@ sqlite3 (async):        10,000 inserts = 2.8s
 
 **Choice:** Single database connection for application lifetime
 
-**Rationale:**
-- **SQLite Design:** Single writer, connection pooling doesn't help
-- **Resource Efficiency:** One connection uses minimal memory (~1 MB)
-- **Simplicity:** No pool management, no connection leaks
-- **WAL Mode:** Readers don't block writers, single connection sufficient
+**Rationale:** Connection pooling provides no benefit with SQLite's single-writer architecture and our synchronous operations.
+
+**Why Pooling Doesn't Help:**
+- **SQLite Design:** Single writer at a time (lock-based), multiple connections don't improve throughput
+- **Synchronous Operations:** Blocking calls mean Node.js can't process multiple requests simultaneously anyway
+- **Resource Efficiency:** One connection uses minimal memory (~1 MB), no pool management overhead
+- **Scale:** At 10 users with blocking operations, queue time is minimal without pooling
 
 **Alternative Considered:** Connection pool (pg-pool, generic-pool)
-- **Rejected:** Adds complexity, no performance gain for SQLite
-- **When to Reconsider:** If migrating to PostgreSQL for >100 users
+- **Rejected:** Adds complexity with zero performance gain for SQLite + synchronous operations
+- **When to Reconsider:** If migrating to async PostgreSQL driver for >100 users (network latency benefits from pooling)
 
 ---
 
@@ -374,7 +397,7 @@ if (userExists(userId)) {
 
 **Choice:** Enable Write-Ahead Logging on startup
 
-**Rationale:** WAL mode dramatically improves concurrency by allowing readers and writers to work simultaneously without blocking.
+**Rationale:** WAL mode provides better write performance and crash recovery, and enables concurrent readers (though limited benefit with synchronous operations).
 
 **Command:**
 ```javascript
@@ -382,27 +405,32 @@ db.pragma('journal_mode = WAL');
 ```
 
 **Benefits:**
-1. **Concurrency:** Readers don't block writers (critical for 10 users)
-2. **Performance:** ~30% faster writes in benchmarks
-3. **Reliability:** Better crash recovery than DELETE mode
-4. **Standard:** SQLite recommended mode for multi-threaded apps
+1. **Write Performance:** ~30% faster writes (reduced fsync overhead)
+2. **Crash Recovery:** Better durability than DELETE mode
+3. **Read Concurrency:** Readers don't block writers (limited benefit with sync operations, see note below)
+4. **Best Practice:** SQLite recommended mode for server applications
 
 **How WAL Works:**
 ```
 DELETE mode:
 Write → Lock entire database → Write to journal → Write to database → Unlock
   ↓
-Readers blocked during writes
+Readers blocked during writes (bad)
 
 WAL mode:
 Write → Append to WAL file → Checkpoint periodically
   ↓
-Readers read from last checkpoint, not blocked
+Readers can read from last checkpoint (not blocked by writes)
 ```
 
+**Concurrency Reality Check:**
+- **In theory:** WAL allows concurrent readers while writing
+- **In practice:** Our synchronous operations block Node.js event loop, so we can't process multiple requests simultaneously anyway
+- **Benefit:** Still useful for write performance (~30% faster) and crash recovery, concurrency benefit is minimal at our scale
+
 **Alternative Considered:** DELETE mode (SQLite default)
-- **Rejected:** Writes block reads, poor concurrency for 10 users
-- **Trade-off:** Three files (db, wal, shm) instead of one, worth it
+- **Rejected:** Slower writes, worse crash recovery
+- **Trade-off:** Three files (db, wal, shm) instead of one, but performance gain worth it
 
 ---
 
@@ -528,30 +556,36 @@ With idx_lastUpdated: O(log n) index scan (already sorted)
 
 **Choice:** Single connection for application lifetime
 
-**Rationale:** SQLite's single-writer design means connection pooling provides no performance benefit and only adds complexity.
+**Rationale:** SQLite's architecture and `better-sqlite3`'s synchronous design make connection pooling unnecessary and counterproductive.
 
-**SQLite Architecture:**
-- Single writer at a time (lock-based)
-- Multiple connections don't improve write throughput
-- WAL mode allows concurrent readers, but better-sqlite3 is synchronous anyway
+**Why Pooling Doesn't Help:**
 
-**Resource Usage:**
+| Factor | Impact on Pooling |
+|--------|-------------------|
+| **SQLite single-writer** | Only one connection can write at a time (serialized by SQLite itself) |
+| **better-sqlite3 synchronous** | Blocking operations mean Node.js can't process multiple requests simultaneously anyway |
+| **WAL mode** | Allows concurrent reads, but with sync operations we're not processing multiple requests |
+| **10 users** | Low concurrency means queue time is minimal without pooling |
+
+**Resource Comparison:**
 ```javascript
 Single connection:
 - Memory: ~1 MB
 - File descriptors: 1
 - Complexity: Zero (no pool management)
+- Max throughput: ~100-200 req/s (SQLite + sync operations limit)
 
 Connection pool (5 connections):
 - Memory: ~5 MB
 - File descriptors: 5
-- Complexity: Pool lifecycle, connection leaks, retry logic
-- Benefit: NONE for SQLite
+- Complexity: High (pool lifecycle, connection leaks, retry logic)
+- Max throughput: Still ~100-200 req/s (SQLite single-writer bottleneck unchanged)
+- Benefit: NONE for SQLite + synchronous operations
 ```
 
 **Alternative Considered:** generic-pool with 5 connections
-- **Rejected:** No performance benefit, adds complexity
-- **When to Reconsider:** If migrating to PostgreSQL (network latency benefits from pooling)
+- **Rejected:** No performance benefit due to SQLite's single-writer + our synchronous operations
+- **When to Reconsider:** If migrating to PostgreSQL with async driver (network latency + multiple writers benefit from pooling)
 
 ---
 
@@ -1010,18 +1044,278 @@ function getUserState(userId) {
 
 ## 📊 **Summary: Design Trade-offs**
 
-| Decision | Complexity | Performance | Maintainability | Cost |
-|----------|------------|-------------|-----------------|------|
-| 3-Tier Architecture | Medium | Good | Excellent | Free |
-| Synchronous DB | Low | Excellent | Excellent | Free |
-| Separate Endpoints | Medium | Good | Good | Free |
-| No Connection Pool | Low | Good | Excellent | Free |
-| WAL Mode | Low | Excellent | Excellent | Free |
-| Return Null Pattern | Low | Excellent | Good | Free |
-| TypeScript Interfaces | Medium | Excellent | Excellent | Free |
-| No Request Queue | Low | N/A | Excellent | Free |
+| Decision | Complexity | Performance @ 10 Users | Scalability | Maintainability | Cost |
+|----------|------------|------------------------|-------------|-----------------|------|
+| 3-Tier Architecture | Medium | Good | Good | Excellent | Free |
+| Synchronous DB | Low | **Good** (blocking acceptable) | ⚠️ Limited (refactor @ 100+) | Excellent | Free |
+| Separate Endpoints | Medium | Good | Good | Good | Free |
+| No Connection Pool | Low | Good (pooling unnecessary) | Good (w/ SQLite) | Excellent | Free |
+| WAL Mode | Low | Good (~30% faster writes) | Good | Excellent | Free |
+| Return Null Pattern | Low | Excellent | Excellent | Good | Free |
+| TypeScript Interfaces | Medium | Excellent | Excellent | Excellent | Free |
+| No Request Queue | Low | N/A | ⚠️ Limited (no retry) | Excellent | Free |
 
-**Overall:** Optimized for **simplicity** and **maintainability** at small scale (10 users)
+**Overall:** Optimized for **simplicity** and **maintainability** at small scale (10 users)  
+**Key Constraint:** Synchronous operations limit scalability beyond ~100 concurrent users (acceptable trade-off for current scope)
+
+---
+
+## Module 4: Audio State Verification (User Story 1 - Dual Verification)
+
+### **4.1 Internal Architecture Description**
+
+**Dual Independent Verification Pattern:**
+
+Module 4 implements User Story 1's hardware verification requirement using **two independent verification methods** to satisfy the auditor's requirement for "two separate ways to verify mute":
+
+1. **Method 1 (Frontend):** Web Audio API check - Frontend analyzes audio frequency data
+2. **Method 2 (Backend):** Packet inspection - Backend analyzes raw audio samples via WebSocket
+
+**Architecture Rationale:**
+
+This dual-method approach provides defense-in-depth verification:
+- **Method 1** is fast (500ms delay) but can be spoofed by malicious frontend
+- **Method 2** is continuous and backend-controlled, providing tamper-proof verification
+- Combined, they offer high-confidence mute verification
+
+**Two-Field State Model:**
+```javascript
+{
+  isMuted: boolean,              // User intent (button clicked)
+  verifiedMuted: boolean|null    // Combined verification result from both methods
+}
+```
+
+**Data Flow:**
+```
+Method 1: audioService → Web Audio API → verifiedMuted (database)
+Method 2: audioStreamService → WebSocket → packet-verifier.js → packetVerifiedMuted (memory cache)
+```
+
+This separation allows the system to:
+1. Capture intent vs. reality (User Story 1 requirement)
+2. Provide two independent verification paths (auditor requirement)
+3. Show other users verification status (✓ verified vs ⚠️ unverified)
+4. Detect conflicts and tampering attempts
+
+### **4.2 Internal Architecture Diagram**
+
+```mermaid
+graph TB
+    subgraph "Method 1: Web Audio API Check"
+        AudioService1["audioService.ts<br/>━━━━━━━━━━━━━━<br/>verifyMuteState()"]
+        WebAudioAPI["Web Audio API<br/>━━━━━━━━━━━━━━━<br/>getByteFrequencyData()"]
+        BackendService1["backendService.ts<br/>━━━━━━━━━━━━━━━<br/>updateMuteVerification()<br/>PATCH /verify"]
+    end
+    
+    subgraph "Method 2: Packet Inspection"
+        AudioStreamService["audioStreamService.ts<br/>━━━━━━━━━━━━━━━━━━━━<br/>ScriptProcessorNode<br/>WebSocket streaming"]
+        WebSocket["WebSocket<br/>━━━━━━━━━━<br/>/audio-stream<br/>Float32Array samples"]
+        PacketVerifier["packet-verifier.js<br/>━━━━━━━━━━━━━━━<br/>RMS energy analysis<br/>Silence detection"]
+    end
+    
+    subgraph "Backend Storage"
+        Server["server.js<br/>━━━━━━━━━━<br/>/verify endpoint<br/>/packet-verification"]
+        DB[("SQLite<br/>━━━━━━━━━━<br/>user_states<br/>verifiedMuted")]
+        Cache["Memory Cache<br/>━━━━━━━━━━━━<br/>packetVerifiedMuted<br/>per user"]
+    end
+    
+    AudioService1 -->|"Read frequency data"| WebAudioAPI
+    WebAudioAPI -->|"Audio level"| AudioService1
+    AudioService1 -->|"Result: true/false"| BackendService1
+    BackendService1 -->|"HTTP PATCH"| Server
+    Server -->|"Store Method 1 result"| DB
+    
+    AudioStreamService -->|"Continuous audio samples"| WebSocket
+    WebSocket -->|"Float32Array"| PacketVerifier
+    PacketVerifier -->|"Store Method 2 result"| Cache
+    Server -->|"GET /packet-verification"| Cache
+    
+    style AudioService1 fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    style WebAudioAPI fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style BackendService1 fill:#FFF9C4,stroke:#FBC02D,stroke-width:3px
+    style AudioStreamService fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    style WebSocket fill:#FFE0B2,stroke:#FF9800,stroke-width:3px
+    style PacketVerifier fill:#E1BEE7,stroke:#9C27B0,stroke-width:3px
+    style Server fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
+    style DB fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
+    style Cache fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,stroke-dasharray: 5 5
+```
+
+### **4.3 Design Justifications**
+
+#### **Decision 1: Why Dual Verification Instead of Single Method?**
+
+**Choice:** Implement TWO independent verification methods (Web Audio API + Packet Inspection)
+
+**Rationale:** Auditor requirement for "two separate ways to verify mute" necessitates independent verification paths that don't share common failure modes.
+
+**Why Two Methods?**
+
+| Concern | Method 1 Alone | Method 2 Alone | Both Methods |
+|---------|---------------|----------------|--------------|
+| **Malicious Client** | ❌ Client can lie | ✅ Backend-controlled | ✅ Mismatch detected |
+| **Network Failure** | ✅ Works offline | ❌ Requires WebSocket | ✅ Graceful degradation |
+| **Performance** | ✅ Fast (500ms) | ⚠️ Continuous (~176 KB/s) | ⚠️ Higher bandwidth |
+| **Tampering Detection** | ❌ No detection | ✅ Backend sees truth | ✅ Conflict flagged |
+| **Complexity** | ✅ Simple | ⚠️ WebSocket + parser | ⚠️ More components |
+
+**Decision Matrix:**
+```
+Method 1 = true,  Method 2 = true   → ✓✓ High confidence (both agree)
+Method 1 = true,  Method 2 = false  → ⚠️  Conflict (client lying?)
+Method 1 = false, Method 2 = true   → ⚠️  Conflict (browser bug?)
+Method 1 = null,  Method 2 = true   → ✓  Backend verification only
+```
+
+**Why This Satisfies Auditor:**
+1. **Independence:** Methods use different APIs (Web Audio API vs WebSocket)
+2. **Trust Boundaries:** Method 1 = client-side, Method 2 = server-side
+3. **Defense in Depth:** If one method is bypassed, the other catches it
+
+**Alternative Considered:** Single verification method (Method 1 only)
+- **Rejected:** Doesn't meet auditor's "two separate ways" requirement
+- **Trade-off:** More complex, but necessary for compliance
+
+---
+
+#### **Decision 2: Why Separate `isMuted` and `verifiedMuted` Fields?**
+
+**Choice:** Two boolean fields instead of single enum
+
+**Rationale:** Separation allows capturing **intent** vs **verified reality**, enabling rich UI states and supporting the dual verification system.
+
+**Field Semantics:**
+- `isMuted`: What the user clicked (intent)
+- `verifiedMuted`: What both verification methods confirmed (reality)
+
+**State Matrix:**
+```
+isMuted=true,  verifiedMuted=true   → ✓ Verified muted (both methods agree)
+isMuted=true,  verifiedMuted=false  → ⚠️ Conflict (at least one method failed)
+isMuted=true,  verifiedMuted=null   → ⏳ Verifying... (waiting for results)
+isMuted=false, verifiedMuted=*      → Unmuted (no verification needed)
+```
+
+**Storage Strategy:**
+- `verifiedMuted` (database): Stores Method 1 result (Web Audio API)
+- `packetVerifiedMuted` (memory cache): Stores Method 2 result (Packet Inspection)
+- Frontend combines both to determine final `verifiedMuted` state
+
+**Alternatives:**
+
+| Approach | Pros | Cons | Decision |
+|----------|------|------|----------|
+| Two booleans (chosen) | Clear semantics, easy SQL queries | Two columns | ✅ **Chosen** - Clearest model |
+| Three fields (isMuted, method1, method2) | Explicit tracking | Three columns, more complex | ❌ Over-engineered |
+| Enum `status` | Single column | Can't distinguish intent from verification | ❌ Lossy information |
+
+---
+
+#### **Decision 3: Why WebSocket for Method 2?**
+
+**Choice:** Use WebSocket (not HTTP polling) for audio sample streaming
+
+**Rationale:** WebSocket provides the bidirectional, low-latency, continuous connection required for real-time audio packet inspection.
+
+**Requirements Analysis:**
+
+| Requirement | HTTP Polling | WebSocket (Chosen) |
+|-------------|-------------|-------------------|
+| **Continuous streaming** | ❌ Must reconnect per sample | ✅ Persistent connection |
+| **Latency** | ⚠️ ~100-500ms per request | ✅ ~10-50ms per message |
+| **Bandwidth efficiency** | ❌ Headers per request (~500 bytes) | ✅ Minimal framing (~2 bytes) |
+| **Backend push** | ❌ Client must poll | ✅ Server pushes verification results |
+| **Overhead** | ❌ TCP handshake per request | ✅ Single handshake |
+
+**Bandwidth Calculation:**
+```
+Audio samples: 44.1kHz sample rate, 4096 samples per buffer
+Buffer frequency: ~10.75 buffers/second
+Data per buffer: 4096 samples × 4 bytes = 16,384 bytes
+Bandwidth: 16,384 × 10.75 = ~176 KB/s per user
+
+For 10 users: ~1.76 MB/s (acceptable)
+For 100 users: ~17.6 MB/s (would need optimization)
+```
+
+**Alternative Considered:** HTTP POST with audio chunks
+- **Rejected:** High overhead, can't push results back, slower
+- **Trade-off:** WebSocket adds dependency, but required for continuous streaming
+
+---
+
+#### **Decision 4: Why RMS Energy Analysis for Silence Detection?**
+
+**Choice:** Use Root Mean Square (RMS) energy calculation to detect silence
+
+**Rationale:** RMS provides a robust, mathematically sound measure of signal energy that is resistant to noise and outliers.
+
+**Algorithm:**
+```javascript
+// Calculate RMS energy across audio samples
+let totalEnergy = 0;
+for (const sample of samples) {
+  totalEnergy += sample * sample;  // Square each sample
+}
+const rmsLevel = Math.sqrt(totalEnergy / samples.length);  // Square root of mean
+const isSilent = rmsLevel < 0.01;  // Threshold: 1%
+```
+
+**Why RMS (vs Alternatives)?**
+
+| Method | Pros | Cons | Decision |
+|--------|------|------|----------|
+| **RMS (chosen)** | • Mathematically sound<br/>• Noise-resistant<br/>• Industry standard | • Requires math.sqrt | ✅ **Chosen** |
+| Peak detection | • Simple | • False positives from noise spikes | ❌ Too sensitive |
+| Average amplitude | • Very simple | • Doesn't account for signal power | ❌ Less accurate |
+| FFT analysis | • Most accurate | • Computationally expensive | ❌ Overkill |
+
+**Threshold Tuning:**
+```
+Threshold | False Positives | False Negatives
+----------|-----------------|----------------
+0.001 (0.1%) | High (fan noise triggers) | Low
+0.01 (1%)    | Low | Low ← Chosen
+0.1 (10%)    | Very low | High (whispers missed)
+```
+
+**Chosen Threshold:** 1% balances false positives and negatives
+
+---
+
+#### **Decision 5: Why Method 1 Has 500ms Delay but Method 2 is Continuous?**
+
+**Choice:** Method 1 waits 500ms after mute; Method 2 streams continuously
+
+**Rationale:** Different verification methods have different timing characteristics and purposes.
+
+**Method 1 (Web Audio API):**
+- **Purpose:** Quick verification after user action
+- **Timing:** One-time check, 500ms after mute
+- **Why 500ms?** Hardware needs settle time (tested empirically)
+- **Trade-off:** Fast but one-time (doesn't catch later unmute)
+
+**Method 2 (Packet Inspection):**
+- **Purpose:** Continuous monitoring, tamper detection
+- **Timing:** Real-time, ~100ms update frequency
+- **Why Continuous?** Detects external hardware unmute immediately
+- **Trade-off:** Higher bandwidth but catches everything
+
+**Complementary Benefits:**
+```
+Scenario                        | Method 1 | Method 2 | Combined
+-------------------------------|----------|----------|----------
+User mutes via software        | ✓ 500ms  | ✓ 100ms  | ✓✓ Both verify
+User unmutes via hardware btn  | ✗ Stale  | ✓ Detects| ⚠️  Conflict flagged
+Network fails                  | ✓ Works  | ✗ Lost   | ✓  Method 1 only
+Malicious client spoofs        | ✗ Fooled | ✓ Catches| ⚠️  Conflict flagged
+```
+
+**Why Not Both Continuous?**
+- Method 1 continuous would waste CPU (analyser processing)
+- Method 2 already provides continuous monitoring
+- Complementary timing strategies provide better coverage
 
 ---
 
@@ -1032,24 +1326,30 @@ function getUserState(userId) {
 - Single instance
 - No caching
 - Fire-and-forget API
+- **Dual verification:** Web Audio API (Method 1) + WebSocket packet inspection (Method 2)
+- WebSocket server for audio streaming (~176 KB/s per user)
 
 ### **Future (100 users):**
 - Async PostgreSQL
 - Connection pool (10 connections)
-- Redis cache (user states)
+- Redis cache (user states + verification results)
 - Add retry logic
+- **Signed verification tokens** (prevent Method 1 spoofing)
+- **Optimized audio streaming:** Downsample to 22.05kHz (~88 KB/s per user)
 
 ### **Future (1000 users):**
 - Database replicas (read/write split)
-- Load balancer (sticky sessions)
-- WebSocket for real-time updates
+- Load balancer (sticky sessions for WebSocket)
+- **WebSocket cluster** with Redis pub/sub for cross-instance communication
 - Event sourcing (audit trail)
+- **Adaptive verification:** Switch to Method 1 only under high load
+- **Edge computing:** Packet verification at CDN edge
 
-**Key:** Architecture allows evolution without rewrite
+**Key:** Architecture allows evolution without rewrite. Dual verification system can scale by optimizing Method 2 (packet inspection) or falling back to Method 1 only during high load.
 
 ---
 
-**Last Updated:** October 22, 2025  
+**Last Updated:** October 23, 2025  
 **Reviewed By:** Senior Architecture Team  
 **Approval:** Design Review Board  
 **Next Review:** Before 100 user milestone

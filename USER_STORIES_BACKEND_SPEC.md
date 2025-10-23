@@ -22,11 +22,12 @@
 
 ## 🗂️ **Backend Modules Implementing User Stories**
 
-Only **3 modules** directly implement these user stories:
+**4 modules** directly implement these user stories:
 
 1. **`backend/server.js`** - REST API endpoints for state management
 2. **`backend/database.js`** - Data persistence layer
 3. **`src/services/backendService.ts`** - Frontend API client (bridge to backend)
+4. **`src/services/audioService.ts`** + **`backend/server.js /verify`** - Audio State Verification (User Story 1)
 
 ---
 
@@ -45,447 +46,200 @@ Provides HTTP endpoints for persisting and retrieving user audio states (mute st
 
 ---
 
-### **1.1 Features - What It Does**
+### **1.1 Features**
 
-#### **A. User State Persistence (Both User Stories)**
-
+#### **A. Complete State Management**
 **Endpoint:** `POST /api/users/:userId/state`
 
-**Purpose:** Create or update complete user state (atomic operation)
-
-**Request:**
-```javascript
-POST /api/users/user-123/state
-Content-Type: application/json
-
-{
-  "isMuted": true,              // User Story 1: Mute status
-  "deviceId": "device-abc",     // User Story 2: Device identifier
-  "deviceLabel": "External Mic", // User Story 2: Human-readable name
-  "roomId": "room-456"          // Room assignment
-}
-```
-
-**Response:**
-```javascript
-200 OK
-{
-  "success": true,
-  "message": "User state updated",
-  "data": {
-    "userId": "user-123",
-    "isMuted": true,
-    "deviceId": "device-abc",
-    "deviceLabel": "External Mic",
-    "roomId": "room-456",
-    "lastUpdated": "2025-10-22T12:34:56.789Z",
-    "createdAt": "2025-10-21T08:00:00.000Z"
-  }
-}
-```
-
-**Validation:**
-- `isMuted` must be boolean (returns 400 if not)
-- `userId` extracted from URL path
-- `deviceId`, `deviceLabel`, `roomId` are optional (nullable)
-- Automatic timestamp management
-
 **What It Does:**
-- ✅ Upserts user record (INSERT or UPDATE)
-- ✅ Updates `lastUpdated` timestamp automatically
-- ✅ Preserves `createdAt` on updates
-- ✅ Returns complete user state after operation
-- ✅ Atomic operation (all fields or none)
-- ✅ Idempotent (same request multiple times = same result)
+- Upserts complete user record (INSERT or UPDATE via SQLite ON CONFLICT)
+- Validates `isMuted` is boolean (400 error if not)
+- Accepts optional: `username`, `deviceId`, `deviceLabel`, `roomId` (all nullable)
+- Auto-manages `lastUpdated`, preserves `createdAt`
+- Returns full state after operation (idempotent)
 
 **What It Does NOT Do:**
-- ❌ Does NOT validate userId format/existence
-- ❌ Does NOT verify deviceId corresponds to real hardware
-- ❌ Does NOT check if user is actually in the specified room
-- ❌ Does NOT enforce business rules (e.g., "can't unmute if kicked")
-- ❌ Does NOT notify other users of state change (polling required)
+- No userId format validation
+- No deviceId hardware verification
+- No room membership checks
+- No real-time push notifications to other users
 
 ---
 
-#### **B. Mute Status Management (User Story 1)**
-
+#### **B. Mute Status Update (User Story 1)**
 **Endpoint:** `PATCH /api/users/:userId/mute`
 
-**Purpose:** Update only mute status without affecting device selection
-
-**Request:**
-```javascript
-PATCH /api/users/user-123/mute
-Content-Type: application/json
-
-{
-  "isMuted": true
-}
-```
-
-**Response:**
-```javascript
-200 OK
-{
-  "success": true,
-  "message": "Mute status updated",
-  "data": {
-    "userId": "user-123",
-    "isMuted": true,
-    "deviceId": "device-abc",        // Preserved from previous state
-    "deviceLabel": "External Mic",   // Preserved from previous state
-    "roomId": "room-456",            // Preserved from previous state
-    "lastUpdated": "2025-10-22T12:35:00.000Z"
-  }
-}
-```
-
-**Behavior:**
-- ✅ Retrieves current user state first
-- ✅ Updates only `isMuted` field
-- ✅ Preserves `deviceId`, `deviceLabel`, `roomId` from current state
-- ✅ Returns 200 even if user doesn't exist (creates new record)
-- ✅ Sets nulls for preserved fields if user is new
-
 **What It Does:**
-- ✅ Granular update (only mute status changes)
-- ✅ Reduces network payload (boolean only)
-- ✅ Maintains state consistency (doesn't reset device)
-- ✅ Fast operation (<10ms with SQLite)
+- Partial update: modifies only `isMuted` field
+- Fetches current state, preserves `deviceId`, `deviceLabel`, `roomId`, `username`
+- Validates `isMuted` is boolean (400 if not)
+- Creates new user if doesn't exist (nulls for other fields)
 
 **What It Does NOT Do:**
-- ❌ Does NOT verify microphone is actually muted at OS level
-- ❌ Does NOT check if user has permission to unmute
-- ❌ Does NOT enforce room-wide mute policies
-- ❌ Does NOT rate-limit rapid mute/unmute toggling
-- ❌ Does NOT broadcast state change to other users
-
-**Use Case:**
-```javascript
-// User Story 1: Mute Verification Flow
-1. User clicks mute button in UI
-2. Frontend: audioService.mute() → Hardware muted at OS level
-3. Frontend: updateMuteStatus(userId, true) → Backend sync
-4. Backend: This endpoint updates database
-5. Frontend: Shows green checkmark (verified)
-6. Other users: Poll /api/rooms/:roomId/users to see mute state
-```
+- No OS-level mute verification
+- No permission checks or room policies
+- No rate limiting
 
 ---
 
-#### **C. Device Selection Management (User Story 2)**
-
+#### **C. Device Selection Update (User Story 2)**
 **Endpoint:** `PATCH /api/users/:userId/device`
 
-**Purpose:** Update device selection without affecting mute status
-
-**Request:**
-```javascript
-PATCH /api/users/user-123/device
-Content-Type: application/json
-
-{
-  "deviceId": "device-xyz",
-  "deviceLabel": "Bluetooth Headset"
-}
-```
-
-**Response:**
-```javascript
-200 OK
-{
-  "success": true,
-  "message": "Device updated",
-  "data": {
-    "userId": "user-123",
-    "isMuted": true,                      // Preserved from previous state
-    "deviceId": "device-xyz",             // Updated
-    "deviceLabel": "Bluetooth Headset",   // Updated
-    "roomId": "room-456",                 // Preserved from previous state
-    "lastUpdated": "2025-10-22T12:36:00.000Z"
-  }
-}
-```
-
-**Validation:**
-- `deviceId` is required (returns 400 if missing)
-- `deviceLabel` is optional (nullable)
-
-**Behavior:**
-- ✅ Retrieves current user state first
-- ✅ Updates only `deviceId` and `deviceLabel` fields
-- ✅ Preserves `isMuted` state (critical for User Story 2 requirement)
-- ✅ Preserves `roomId`
-- ✅ Returns complete state after update
-
 **What It Does:**
-- ✅ Maintains mute state during device switch (key feature!)
-- ✅ Tracks device history via `lastUpdated` timestamps
-- ✅ Supports null deviceLabel (device enumeration may not provide labels)
-- ✅ Enables device preference persistence
+- Partial update: modifies only `deviceId` and `deviceLabel` fields
+- **Preserves `isMuted` state** (critical for User Story 2: device switch without disconnection)
+- Fetches current state first, preserves `roomId`, `username`
+- Requires `deviceId` (400 if missing), `deviceLabel` optional (nullable)
 
 **What It Does NOT Do:**
-- ❌ Does NOT verify deviceId exists on user's system
-- ❌ Does NOT check if device is available/connected
-- ❌ Does NOT handle device permissions
-- ❌ Does NOT store device capabilities (sample rate, channels, etc.)
-- ❌ Does NOT manage device enumeration (frontend responsibility)
-
-**Use Case:**
-```javascript
-// User Story 2: Device Switching Flow
-1. User selects new device in dropdown
-2. Frontend: audioService.switchMicrophone(deviceId)
-   ├── Stores current mute state (e.g., muted=true)
-   ├── Stops current audio stream
-   ├── Requests new device from OS
-   ├── Restores mute state to new device
-3. Frontend: updateDevice(userId, deviceId, label) → Backend sync
-4. Backend: This endpoint updates database (preserving mute state)
-5. Frontend: Shows confirmation "Switched to Bluetooth Headset"
-6. Mute button: Still shows 🔇 (mute state preserved)
-```
+- No deviceId hardware existence checks
+- No device availability/connectivity verification
+- No device capability storage (sample rate, channels, etc.)
 
 ---
 
-#### **D. User State Retrieval (Both User Stories)**
-
+#### **D. User State Retrieval**
 **Endpoint:** `GET /api/users/:userId`
 
-**Purpose:** Retrieve complete user state (for reconnection recovery)
-
-**Request:**
-```javascript
-GET /api/users/user-123
-```
-
-**Response (User Exists):**
-```javascript
-200 OK
-{
-  "success": true,
-  "data": {
-    "userId": "user-123",
-    "isMuted": true,
-    "deviceId": "device-xyz",
-    "deviceLabel": "Bluetooth Headset",
-    "roomId": "room-456",
-    "lastUpdated": "2025-10-22T12:36:00.000Z",
-    "createdAt": "2025-10-21T08:00:00.000Z"
-  }
-}
-```
-
-**Response (User Not Found):**
-```javascript
-404 Not Found
-{
-  "success": false,
-  "error": "User not found"
-}
-```
-
 **What It Does:**
-- ✅ Retrieves current state from database
-- ✅ Returns 404 if user never connected
-- ✅ Enables state recovery after page refresh
-- ✅ Supports reconnection logic
+- Returns current state for single user (includes `username`, `isMuted`, `deviceId`, `deviceLabel`, `roomId`, timestamps)
+- 404 if user not found
+- Enables state recovery after reconnection/refresh
 
 **What It Does NOT Do:**
-- ❌ Does NOT check if user is currently online
-- ❌ Does NOT return historical states (only current)
-- ❌ Does NOT include other users in room
-
-**Use Case:**
-```javascript
-// Reconnection Flow
-1. User refreshes page (WebSocket disconnected)
-2. Frontend: Loads app.tsx
-3. Frontend: getUserState(userId)
-4. Backend: This endpoint returns last known state
-5. Frontend: Restores mute button UI
-6. Frontend: Restores device selection in dropdown
-7. Frontend: Continues from previous state
-```
+- No online/presence status
+- No historical state retrieval
 
 ---
 
-#### **E. Room User Listing (Multi-User Coordination)**
+#### **E. All Users List**
+**Endpoint:** `GET /api/users`
 
+**What It Does:**
+- Returns array of all users, ordered by `lastUpdated DESC`
+- Empty array `[]` if no users exist
+
+**What It Does NOT Do:**
+- No pagination
+- No filtering (returns all users)
+
+---
+
+#### **F. Room User List**
 **Endpoint:** `GET /api/rooms/:roomId/users`
 
-**Purpose:** List all users in a meeting room (enables UI to show other participants)
-
-**Request:**
-```javascript
-GET /api/rooms/room-456/users
-```
-
-**Response:**
-```javascript
-200 OK
-{
-  "success": true,
-  "roomId": "room-456",
-  "count": 3,
-  "data": [
-    {
-      "userId": "user-123",
-      "isMuted": true,
-      "deviceId": "device-xyz",
-      "deviceLabel": "Bluetooth Headset",
-      "roomId": "room-456",
-      "lastUpdated": "2025-10-22T12:36:00.000Z"
-    },
-    {
-      "userId": "user-456",
-      "isMuted": false,
-      "deviceId": "default",
-      "deviceLabel": "Built-in Microphone",
-      "roomId": "room-456",
-      "lastUpdated": "2025-10-22T12:35:30.000Z"
-    },
-    {
-      "userId": "user-789",
-      "isMuted": false,
-      "deviceId": "device-usb",
-      "deviceLabel": "USB Microphone",
-      "roomId": "room-456",
-      "lastUpdated": "2025-10-22T12:34:00.000Z"
-    }
-  ]
-}
-```
-
 **What It Does:**
-- ✅ Returns all users assigned to specified room
-- ✅ Includes mute states for all users (User Story 1)
-- ✅ Includes device selections for all users (User Story 2)
-- ✅ Ordered by `lastUpdated` DESC (most recent first)
-- ✅ Returns empty array if room has no users
+- Returns array of users in specific room, ordered by `lastUpdated DESC`
+- Empty array `[]` if room empty or doesn't exist
+- Indexed query (fast lookup via `idx_roomId`)
 
 **What It Does NOT Do:**
-- ❌ Does NOT filter inactive users (no timeout mechanism)
-- ❌ Does NOT return user presence status (online/offline)
-- ❌ Does NOT paginate results (returns all, max 10 users expected)
-- ❌ Does NOT include audio levels or real-time metrics
-
-**Use Case:**
-```javascript
-// Participant List UI
-1. Frontend: Polls GET /api/rooms/room-456/users every 5 seconds
-2. Backend: Returns all users in room
-3. Frontend: Renders participant list:
-   - User 123: 🔇 Muted (Bluetooth Headset)
-   - User 456: 🎤 Unmuted (Built-in Microphone)
-   - User 789: 🎤 Unmuted (USB Microphone)
-```
+- No room existence validation
+- No pagination
 
 ---
 
-### **1.2 Features - What It Does NOT Do**
+#### **G. User State Deletion**
+**Endpoint:** `DELETE /api/users/:userId`
 
-#### **A. Real-Time Communication**
-- ❌ No WebSocket connections
-- ❌ No Server-Sent Events (SSE)
-- ❌ No push notifications to clients
-- ❌ Clients must poll for updates (REST only)
-- ❌ No sub-second latency guarantees
+**What It Does:**
+- Permanently deletes user record from database
+- Returns 200 with `{success: true, deleted: true}` if user existed
+- Returns 404 with `{success: false, error: "User not found"}` if user didn't exist
 
-**Implication:** 
-- Updates propagate on next poll (5-10 second delay typical)
-- Not suitable for real-time collaboration indicators
-- Acceptable for 10 users, not for 100+
-
-#### **B. Audio/Video Processing**
-- ❌ Does NOT process audio streams
-- ❌ Does NOT encode/decode audio codecs
-- ❌ Does NOT handle WebRTC signaling
-- ❌ Does NOT transmit media between users
-- ❌ Does NOT manage STUN/TURN servers
-
-**Implication:**
-- This is a state management API only
-- Media flows peer-to-peer (WebRTC) or not at all
-- Backend has no visibility into actual audio data
-
-#### **C. Authentication & Authorization**
-- ❌ No user authentication (no JWT, no OAuth)
-- ❌ No session management
-- ❌ No permission checks (anyone can update any user)
-- ❌ No rate limiting (beyond basic Express defaults)
-- ❌ No CSRF protection
-
-**Implication:**
-- Demo/prototype security model only
-- Trusts all clients
-- Not suitable for production without adding auth
-
-#### **D. Business Logic**
-- ❌ No meeting scheduling
-- ❌ No room capacity limits
-- ❌ No moderator privileges
-- ❌ No "force mute all" functionality
-- ❌ No recording/playback
-- ❌ No user kick/ban logic
-
-**Implication:**
-- Minimal business logic (pure state storage)
-- Extensions require custom endpoints
-
-#### **E. Data Validation**
-- ❌ Does NOT validate userId format (accepts any string)
-- ❌ Does NOT verify deviceId exists on user's system
-- ❌ Does NOT check roomId is valid meeting
-- ❌ Does NOT sanitize input for XSS (trusts clients)
-- ❌ Does NOT enforce schema beyond type checking
-
-**Implication:**
-- Garbage in, garbage out
-- Frontend must validate before sending
-- SQL injection prevented by prepared statements only
+**What It Does NOT Do:**
+- No soft delete or archiving
+- No cascade deletion (rooms remain if empty)
 
 ---
 
-### **1.3 Technical Constraints**
+#### **H. Health Check**
+**Endpoint:** `GET /api/health`
 
-#### **Performance Characteristics**
-```javascript
-Tested on t2.micro (1 vCPU, 1 GB RAM):
-- Response time: 30-100ms per request
-- Throughput: ~100 requests/second
-- Concurrent users: 10 (design limit)
-- Database size: Negligible (<1 MB for 10 users)
-```
+**What It Does:**
+- Returns database connectivity status, uptime, memory usage
+- Structured JSON: `{status, timestamp, uptime, database, memory, environment}`
+- Returns 503 if database unreachable
 
-#### **Scalability Limits**
-```javascript
-Hard Limits:
-- SQLite write lock: ~10 concurrent writes max
-- Single-threaded: No horizontal scaling
-- In-memory metrics: Lost on restart
-- No load balancer support (sticky sessions required)
+**What It Does NOT Do:**
+- No external dependency checks (only database)
 
-Soft Limits:
-- Room size: 10 users (no enforcement, just design target)
-- Request rate: ~100/s before degradation
-- Database size: 140 TB theoretical, 100 MB practical
-```
+---
 
-#### **Error Handling**
-```javascript
-HTTP Status Codes:
-- 200 OK: Success
-- 400 Bad Request: Invalid input (e.g., isMuted not boolean)
-- 404 Not Found: User doesn't exist (GET only)
-- 500 Internal Server Error: Database failure, uncaught exception
+#### **I. Metrics**
+**Endpoint:** `GET /api/metrics`
 
-Response Format (All Errors):
-{
-  "success": false,
-  "error": "Human-readable error message"
-}
-```
+**What It Does:**
+- Returns API performance metrics: total requests, average response time, error rate, slow requests
+- Per-endpoint breakdown available
+
+**What It Does NOT Do:**
+- No historical metrics (current session only)
+
+---
+
+#### **J. Mute Verification Status **
+**Endpoint:** `PATCH /api/users/:userId/verify`
+
+**What It Does:**
+- Updates only `verifiedMuted` field (Web Audio API verification result from frontend)
+- Validates `verifiedMuted` is boolean (400 if not)
+- Preserves `isMuted`, `deviceId`, `deviceLabel`, `roomId`, `username`
+- Returns complete state after update
+
+**What It Does NOT Do:**
+- No automatic verification (relies on frontend reporting)
+
+**Purpose:** 
+Stores Web Audio API verification result (Method 1 of dual verification).
+
+---
+
+#### **K. Packet Verification Status (User Story 1 - Dual Verification Method 2)**
+**Endpoint:** `GET /api/users/:userId/packet-verification`
+
+**What It Does:**
+- Returns backend packet inspection result (independent verification)
+- Analyzes actual audio data received via WebSocket
+- Provides RMS (Root Mean Square) audio level analysis
+- Returns `packetVerifiedMuted`: true (silence detected) / false (audio detected) / null (no data)
+
+**What It Does NOT Do:**
+- Requires active WebSocket audio streaming (not automatic)
+- Stale if no audio streamed in last 5 seconds
+
+**Purpose:**
+Provides **second independent verification method** by inspecting audio packets on backend. This satisfies auditor's requirement for "two separate ways to verify mute" - Web Audio API check (frontend) + packet inspection (backend).
+
+---
+
+### **1.2 Limitations**
+
+**Real-Time:**
+- REST-based state management (clients must poll for user state updates)
+- WebSocket used only for audio streaming (packet verification), not for state push notifications
+
+**Security:** 
+- No authentication, authorization, rate limiting, or CSRF protection (demo/prototype only)
+
+**Media:**
+- State management + audio verification only—no video processing, encoding/decoding, WebRTC signaling, or media relay/transmission
+- Audio processing limited to RMS energy analysis for mute verification (packet inspection)
+
+**Business Logic:**
+- No meeting scheduling, room limits, moderator privileges, force mute, recording, or kick/ban
+
+**Validation:**
+- Minimal input validation (only boolean type checks)
+- No userId/deviceId/roomId format or existence verification
+- Frontend responsible for validation
+
+**Scalability:**
+- SQLite: ~10 concurrent writes max, no horizontal scaling
+- Single-threaded, no load balancer support
+- In-memory metrics lost on restart
+
+**Performance:** 30-100ms per request, ~100 req/s throughput (tested on t2.micro)
 
 ---
 
@@ -504,207 +258,43 @@ Abstracts database operations for user state management. Provides CRUD operation
 
 ---
 
-### **2.1 Features - What It Does**
+### **2.1 Features**
 
-#### **A. Schema Management**
+#### **Schema: `user_states` Table**
+- Columns: 
+  - `userId` (PK)
+  - `username`
+  - `isMuted` (INTEGER 0/1) - User's intent (button clicked)
+  - **`verifiedMuted` (INTEGER 0/1/NULL)** - Hardware verification result (User Story 1)
+  - `deviceId`
+  - `deviceLabel`
+  - `roomId`
+  - `lastUpdated`
+  - `createdAt`
+- Indexes: `idx_roomId`, `idx_lastUpdated`, `idx_username`
+- WAL mode enabled for write performance (~30% faster) and crash recovery
+- `initDatabase()`: Idempotent schema creation (CREATE IF NOT EXISTS)
 
-**Function:** `initDatabase()`
+**Note:** `verifiedMuted` is separate from `isMuted` to track verification status. NULL means unverified, 0/1 means verified false/true.
 
-**Purpose:** Create database schema if it doesn't exist (idempotent)
-
-**Schema:**
-```sql
-CREATE TABLE IF NOT EXISTS user_states (
-  userId TEXT PRIMARY KEY,          -- Unique user identifier
-  isMuted INTEGER NOT NULL DEFAULT 0, -- Boolean as 0/1 (SQLite convention)
-  deviceId TEXT,                    -- Device identifier (nullable)
-  deviceLabel TEXT,                 -- Human-readable device name (nullable)
-  roomId TEXT,                      -- Meeting room identifier (nullable)
-  lastUpdated TEXT NOT NULL,        -- ISO 8601 timestamp
-  createdAt TEXT NOT NULL           -- ISO 8601 timestamp
-);
-
-CREATE INDEX IF NOT EXISTS idx_roomId 
-  ON user_states(roomId);           -- Fast room queries
-
-CREATE INDEX IF NOT EXISTS idx_lastUpdated 
-  ON user_states(lastUpdated);      -- Fast ordering by recency
-```
+#### **CRUD Operations**
 
 **What It Does:**
-- ✅ Creates table on first run
-- ✅ Creates indexes for common queries
-- ✅ Enables WAL mode for better concurrency
-- ✅ Idempotent (safe to run multiple times)
-- ✅ Logs success message
+- `getUserState(userId)`: Returns single user or null; prepared statement; INTEGER→boolean conversion
+- `getAllUserStates()`: Returns all users ordered by `lastUpdated DESC`; no pagination
+- `getUsersByRoom(roomId)`: Returns users in room; uses `idx_roomId` index
+- `createOrUpdateUserState(data)`: Upsert via `INSERT...ON CONFLICT DO UPDATE`; auto-timestamps; boolean→INTEGER conversion; returns full state
+- `deleteUserState(userId)`: Hard delete; returns boolean success
+- `cleanupOldEntries(daysOld)`: Deletes entries older than N days (maintenance)
 
 **What It Does NOT Do:**
-- ❌ Does NOT handle migrations (schema is fixed)
-- ❌ Does NOT version control schema
-- ❌ Does NOT support rollback to previous schema
-- ❌ Does NOT validate existing data on startup
+- No input validation (caller's responsibility)
+- No caching
+- No audit trail/change logging
+- No transactions (single statements only)
+- No schema migrations or versioning
 
 ---
-
-#### **B. User State Retrieval**
-
-**Function:** `getUserState(userId)`
-
-**Purpose:** Retrieve single user state by ID
-
-**Signature:**
-```javascript
-function getUserState(userId: string): UserState | null
-```
-
-**Returns:**
-```javascript
-{
-  userId: "user-123",
-  isMuted: true,                    // Converted from INTEGER to boolean
-  deviceId: "device-xyz",
-  deviceLabel: "Bluetooth Headset",
-  roomId: "room-456",
-  lastUpdated: "2025-10-22T12:36:00.000Z",
-  createdAt: "2025-10-21T08:00:00.000Z"
-}
-
-// OR
-
-null  // If user not found
-```
-
-**What It Does:**
-- ✅ Uses prepared statement (SQL injection safe)
-- ✅ Converts SQLite INTEGER (0/1) to JavaScript boolean
-- ✅ Returns null instead of throwing if not found
-- ✅ Fast query (<1ms)
-
-**What It Does NOT Do:**
-- ❌ Does NOT cache results
-- ❌ Does NOT validate userId format
-- ❌ Does NOT load related entities (rooms, etc.)
-
----
-
-#### **C. Bulk User Retrieval**
-
-**Function:** `getAllUserStates()`
-
-**Purpose:** Retrieve all users (used by GET /api/users)
-
-**Signature:**
-```javascript
-function getAllUserStates(): UserState[]
-```
-
-**Returns:**
-```javascript
-[
-  { userId: "user-123", isMuted: true, ... },
-  { userId: "user-456", isMuted: false, ... },
-  // ...
-]
-// Ordered by lastUpdated DESC (most recent first)
-```
-
-**What It Does:**
-- ✅ Returns all users in database
-- ✅ Orders by `lastUpdated` DESC
-- ✅ Converts booleans for all users
-- ✅ Returns empty array if no users
-
-**What It Does NOT Do:**
-- ❌ Does NOT paginate (returns all)
-- ❌ Does NOT filter by criteria
-- ❌ Does NOT limit result size
-
----
-
-#### **D. User State Upsert (Core Operation)**
-
-**Function:** `createOrUpdateUserState(data)`
-
-**Purpose:** Insert new user or update existing (atomic operation)
-
-**Signature:**
-```javascript
-function createOrUpdateUserState(data: {
-  userId: string,
-  isMuted: boolean,
-  deviceId: string | null,
-  deviceLabel: string | null,
-  roomId: string | null
-}): UserState
-```
-
-**SQL (Prepared Statement):**
-```sql
-INSERT INTO user_states (
-  userId, isMuted, deviceId, deviceLabel, roomId, 
-  lastUpdated, createdAt
-)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(userId) DO UPDATE SET
-  isMuted = excluded.isMuted,
-  deviceId = excluded.deviceId,
-  deviceLabel = excluded.deviceLabel,
-  roomId = excluded.roomId,
-  lastUpdated = excluded.lastUpdated;
-```
-
-**What It Does:**
-- ✅ **Upsert operation:** INSERT if new, UPDATE if exists
-- ✅ Converts boolean to INTEGER (0/1) for SQLite
-- ✅ Generates timestamps automatically (ISO 8601)
-- ✅ Preserves `createdAt` on updates (conflict clause)
-- ✅ Updates `lastUpdated` on every call
-- ✅ Returns complete user state after operation
-- ✅ Atomic (all fields or none)
-
-**What It Does NOT Do:**
-- ❌ Does NOT validate input (caller's responsibility)
-- ❌ Does NOT log changes (no audit trail)
-- ❌ Does NOT handle partial updates efficiently
-  - (Updates all fields even if only one changed)
-- ❌ Does NOT use transactions (single statement only)
-
-**Performance:**
-- Write time: ~5-10ms on SSD
-- Blocking operation (waits for disk write)
-
----
-
-#### **E. User Deletion**
-
-**Function:** `deleteUserState(userId)`
-
-**Purpose:** Remove user from database
-
-**Signature:**
-```javascript
-function deleteUserState(userId: string): boolean
-```
-
-**Returns:**
-```javascript
-true   // If user was deleted
-false  // If user didn't exist
-```
-
-**What It Does:**
-- ✅ Deletes user record
-- ✅ Returns boolean success indicator
-- ✅ Idempotent (safe to call multiple times)
-
-**What It Does NOT Do:**
-- ❌ Does NOT cascade delete related data (none exists)
-- ❌ Does NOT soft delete (permanent removal)
-- ❌ Does NOT require confirmation
-
----
-
-#### **F. Room-Based Queries**
 
 **Function:** `getUsersByRoom(roomId)`
 
@@ -754,12 +344,12 @@ function getUsersByRoom(roomId: string): UserState[]
 
 #### **B. No Connection Pooling**
 - ❌ Single connection to database (better-sqlite3 design)
-- ❌ Does NOT support concurrent writes well
-- ❌ Writes serialize (one at a time)
+- ❌ Does NOT support concurrent writes well (SQLite single-writer + synchronous operations)
+- ❌ Writes serialize (one at a time) and block Node.js event loop
 
 **Implication:**
-- Max ~10 concurrent users practical
-- Beyond that, consider PostgreSQL with connection pool
+- Max ~10 concurrent users practical (blocking operations acceptable at this scale)
+- Beyond that, consider async PostgreSQL with connection pool
 
 #### **C. No Caching**
 - ❌ Every read hits disk
@@ -797,9 +387,9 @@ function getUsersByRoom(roomId: string): UserState[]
 #### **SQLite Limitations**
 ```javascript
 Write Concurrency:
-- WAL mode: ~10 concurrent writes max
-- Single writer at a time (lock contention)
-- Reads don't block writes (WAL benefit)
+- WAL mode: ~10 concurrent writes max (theoretical)
+- Single writer at a time (SQLite lock-based)
+- Reads don't block writes (WAL benefit, but limited by sync operations - see below)
 
 File Size:
 - Max database size: 140 TB (theoretical)
@@ -815,9 +405,10 @@ Performance:
 #### **better-sqlite3 Design**
 ```javascript
 Synchronous API:
-- All operations block Node.js event loop
+- All operations block Node.js event loop (~5-10ms per write)
 - No async/await needed (intentional design)
-- Simpler code, but can block under load
+- Simpler code, but blocks concurrent request processing
+- Acceptable at 10 users, becomes bottleneck at 100+ users
 
 Connection:
 - Single connection for app lifetime
@@ -1255,17 +846,236 @@ useEffect(() => {
 
 ---
 
-## 🎯 **Summary: Module Responsibilities**
+## Module 4: Audio State Verification (User Story 1 - Dual Verification)
 
-| Module | User Story 1 (Mute) | User Story 2 (Device) |
-|--------|---------------------|----------------------|
-| **server.js** | `PATCH /api/users/:userId/mute`<br>Stores mute status<br>Returns state to other users | `PATCH /api/users/:userId/device`<br>Stores device selection<br>**Preserves mute status** |
-| **database.js** | `createOrUpdateUserState()`<br>Persists `isMuted` field<br>Indexed queries for rooms | `createOrUpdateUserState()`<br>Persists `deviceId`, `deviceLabel`<br>**Does NOT reset mute** |
-| **backendService.ts** | `updateMuteStatus()`<br>Sends mute to backend<br>Fire-and-forget | `updateDevice()`<br>Sends device to backend<br>Fire-and-forget |
+### **Module Overview**
+
+**Components:** 
+- Frontend: `audioService.ts` (Web Audio API check) + `audioStreamService.ts` (WebSocket streaming)
+- Backend: `server.js /verify` endpoint + `packet-verifier.js` (WebSocket server) + `/packet-verification` endpoint
+
+**Protocol:** **Dual Independent Verification**
+1. **Method 1 (Frontend):** Web Audio API `getByteFrequencyData()` → Frontend checks audio levels
+2. **Method 2 (Backend):** WebSocket audio stream → Backend inspects packets for silence
+
+**Dependencies:** Web Audio API, WebSocket (ws), Express
+
+**Purpose:**  
+Implements User Story 1's requirement to verify mute at BOTH software AND hardware levels using **two independent methods**. This satisfies the auditor's requirement for "two separate ways to verify" - frontend Web Audio API check PLUS backend packet inspection.
 
 ---
 
-**Last Updated:** October 22, 2025  
+### **4.1 Features**
+
+#### **Dual Verification Architecture**
+
+**Method 1: Web Audio API Check (Frontend)**
+```
+User Clicks Mute → audioService.mute() → Wait 500ms → verifyMuteState()
+                     ↓                                        ↓
+                track.enabled=false                  getByteFrequencyData()
+                                                             ↓
+                                                    Audio level < 1% ?
+                                                             ↓
+                                           updateMuteVerification(true/false)
+```
+
+**Method 2: Packet Inspection (Backend)**
+```
+Microphone → Web Audio API → ScriptProcessorNode → WebSocket Stream
+                                                           ↓
+                                                    Backend receives
+                                                    Float32Array samples
+                                                           ↓
+                                                    RMS energy calculation
+                                                           ↓
+                                                    Silence detected?
+                                                           ↓
+                                            packetVerifiedMuted: true/false
+```
+
+**Two-Field State Model:**
+1. **`isMuted`** (User Intent): What button they clicked
+2. **`verifiedMuted`** (Dual Verification Result): Combined result from both methods
+
+**Why Dual Verification?**
+- **Auditor requirement:** "Two separate ways to verify mute"
+- **Method 1 weakness:** Frontend can be manipulated by malicious user
+- **Method 2 strength:** Backend independently verifies by inspecting actual audio data
+- **Combined:** If both methods agree → high confidence; if disagree → flag conflict
+
+---
+
+#### **Frontend Verification (audioService.ts)**
+
+**Function:** `verifyMuteState()`
+
+**What It Does:**
+- Calls Web Audio API `getByteFrequencyData()` to read actual microphone input
+- Calculates average audio level from frequency bins
+- Returns `true` if audio level = 0% (hardware silent)
+- Returns `false` if audio level > 0% (hardware active despite mute)
+
+**Implementation:**
+```typescript
+public verifyMuteState(): boolean {
+  if (!this.analyser) return false;
+  
+  const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+  this.analyser.getByteFrequencyData(dataArray);
+  
+  const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+  const normalizedLevel = average / 255;
+  
+  // Verified if level is below threshold (effectively silent)
+  return normalizedLevel < 0.01;  // <1% = verified muted
+}
+```
+
+**Timing:**
+- Called 500ms after user clicks mute (allows time for hardware to respond)
+- Frontend immediately sends result to backend via `updateMuteVerification()`
+
+---
+
+#### **Backend Verification Endpoint**
+
+**Endpoint:** `PATCH /api/users/:userId/verify`
+
+**Request:**
+```json
+{
+  "verifiedMuted": true  // or false
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Mute verification status updated",
+  "data": {
+    "userId": "user-123",
+    "isMuted": true,        // User clicked mute
+    "verifiedMuted": true,  // Hardware confirmed silent
+    ...
+  }
+}
+```
+
+**Database Operation:**
+- Updates only `verifiedMuted` field
+- Preserves all other fields (`isMuted`, `deviceId`, etc.)
+- Returns complete state so other users can see verification status
+
+---
+
+### **4.2 Dual Verification Flow**
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│ 1. User clicks mute button                                    │
+│    - Frontend: audioService.mute()                            │
+│    - Hardware: track.enabled = false                          │
+│    - Backend: updateMuteStatus(userId, true) → isMuted=true   │
+└────────────────┬──────────────────────────────────────────────┘
+                 │
+         ┌───────┴───────┐
+         │               │
+         ▼               ▼
+┌──────────────┐  ┌──────────────────────────────────────────┐
+│ Method 1:    │  │ Method 2:                                │
+│ Web Audio    │  │ Packet Inspection                        │
+│ API Check    │  │                                          │
+└──────┬───────┘  └──────┬───────────────────────────────────┘
+       │                 │
+       ▼                 ▼
+┌──────────────┐  ┌──────────────────────────────────────────┐
+│ 2a. Wait     │  │ 2b. audioStreamService.startStreaming()  │
+│ 500ms        │  │     - Continuously sends audio samples   │
+└──────┬───────┘  │       via WebSocket                      │
+       │          └──────┬───────────────────────────────────┘
+       ▼                 │
+┌──────────────┐         │
+│ 3a. Verify   │         │
+│ audioService │         │
+│ .verifyMute  │         │
+│ State()      │         │
+│ - Check freq │         │
+│   data       │         │
+│ - Level <1%? │         │
+└──────┬───────┘         │
+       │                 ▼
+       │          ┌──────────────────────────────────────────┐
+       │          │ 3b. Backend: packet-verifier.js          │
+       │          │     - Receives Float32Array samples      │
+       │          │     - Calculates RMS energy              │
+       │          │     - Detects silence (threshold <1%)   │
+       │          │     - Returns packetVerifiedMuted        │
+       │          └──────┬───────────────────────────────────┘
+       │                 │
+       ▼                 ▼
+┌──────────────┐  ┌──────────────────────────────────────────┐
+│ 4a. Update   │  │ 4b. Backend stores packet result         │
+│ PATCH /verify│  │     - Available via GET                  │
+│ verifiedMuted│  │       /packet-verification               │
+└──────┬───────┘  └──────┬───────────────────────────────────┘
+       │                 │
+       └────────┬────────┘
+                ▼
+┌───────────────────────────────────────────────────────────────┐
+│ 5. Frontend combines both results                             │
+│    - Method 1 (Web Audio API): true/false                     │
+│    - Method 2 (Packet Inspection): true/false/null            │
+│                                                                │
+│    Decision Matrix:                                            │
+│    Both true    → ✓✓ Verified (high confidence)              │
+│    Both false   → ✗✗ Conflict (audio detected by both)       │
+│    One true, one false → ⚠️  Warning (mismatch detected)     │
+│    Packet null  → ⚠️  Partial (only Web Audio verified)      │
+└───────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### **4.3 Limitations**
+
+**WebSocket Dependency (Method 2):**
+- Packet verification requires active WebSocket connection
+- Network interruption stops packet inspection (falls back to Method 1 only)
+- Additional bandwidth: ~176 KB/s per user (44.1kHz × 4 bytes)
+
+**Verification Timing:**
+- Method 1: 500ms delay after mute (hardware settle time)
+- Method 2: Real-time continuous (updates every ~100ms)
+- Brief window where Method 1 = null, Method 2 = active
+
+**Not Truly "OS-Level":**
+- Both methods use browser APIs (Web Audio API + WebSocket)
+- True OS-level verification would require native agent (out of scope for web app)
+- However, packet inspection provides backend-side verification independent of frontend
+
+**No Continuous Monitoring (Method 1):**
+- Web Audio API check happens once after mute click
+- If hardware unmuted externally (physical button), Method 1 not updated
+- Method 2 (packet inspection) detects this immediately via continuous streaming
+
+---
+
+## 🎯 **Summary: Module Responsibilities**
+
+| Module | User Story 1 (Mute) | User Story 1 (Verification Method 1) | User Story 1 (Verification Method 2) | User Story 2 (Device) |
+|--------|---------------------|--------------------------------------|-------------------------------------|----------------------|
+| **server.js** | `PATCH /api/users/:userId/mute`<br>Stores mute intent (`isMuted`) | `PATCH /api/users/:userId/verify`<br>Stores Web Audio API result | WebSocket `/audio-stream`<br>`GET /packet-verification`<br>Packet inspection | `PATCH /api/users/:userId/device`<br>Stores device selection<br>**Preserves mute status** |
+| **database.js** | `createOrUpdateUserState()`<br>Persists `isMuted` field | `createOrUpdateUserState()`<br>Persists `verifiedMuted` field | (Packet results cached in memory) | `createOrUpdateUserState()`<br>Persists `deviceId`, `deviceLabel`<br>**Does NOT reset mute** |
+| **backendService.ts** | `updateMuteStatus()`<br>Sends mute intent | `updateMuteVerification()`<br>Sends Web Audio API result | (Uses audioStreamService) | `updateDevice()`<br>Sends device to backend |
+| **audioService.ts** | `mute()`, `unmute()`<br>Controls hardware | `verifyMuteState()`<br>Web Audio API check | (N/A) | `switchMicrophone()`<br>Changes input device |
+| **audioStreamService.ts** | (N/A) | (N/A) | `startStreaming()`<br>Sends audio samples via WebSocket<br>`onVerification()` callback | (N/A) |
+| **packet-verifier.js** | (N/A) | (N/A) | `processAudioSamples()`<br>RMS energy analysis<br>Silence detection | (N/A) |
+
+---
+
+**Last Updated:** October 23, 2025  
 **Maintained By:** Team Bug Farmers Backend Team  
 **Review Cycle:** Before each sprint
 

@@ -9,6 +9,7 @@ interface UserState {
   userId: string;
   username: string;
   isMuted: boolean;
+  verifiedMuted: boolean | null;  // User Story 1: Hardware verification result
   deviceId: string | null;
   deviceLabel: string | null;
   roomId: string | null;
@@ -126,6 +127,37 @@ export async function updateDevice(
     return result.data || null;
   } catch (error) {
     console.error('Error updating device:', error);
+    return null;
+  }
+}
+
+/**
+ * Update mute verification status (User Story 1: Hardware verification)
+ */
+export async function updateMuteVerification(
+  userId: string,
+  verifiedMuted: boolean
+): Promise<UserState | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/verify`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ verifiedMuted }),
+    });
+
+    const result: ApiResponse<UserState> = await response.json();
+
+    if (!response.ok || !result.success) {
+      console.error('Failed to update verification status:', result.error);
+      return null;
+    }
+
+    console.log(`✅ Mute verification: ${verifiedMuted ? 'Verified ✓' : 'Failed ✗'}`);
+    return result.data || null;
+  } catch (error) {
+    console.error('Error updating verification status:', error);
     return null;
   }
 }
