@@ -149,7 +149,7 @@ PATCH /api/users/:userId/device
 POST /api/users/:userId/state
   → Updates ALL fields
   → Problem: Frontend must send complete state every time
-  → Risk: Race condition if two updates overlap
+  → Risk: If frontend has stale state (e.g., from network lag), it could overwrite recent changes
 ```
 
 **Benefits of Granular Endpoints:**
@@ -170,7 +170,7 @@ POST /api/users/:userId/state
 
 **Rationale:**
 - **Simplicity:** No async/await complexity in data layer
-- **Performance:** Synchronous is FASTER for SQLite (no event loop overhead)
+- **Performance:** Fast enough for 10 users, blocking acceptable at this scale
 - **Reliability:** Blocking ensures operation completes before response sent
 - **Scale:** With 10 users, blocking is negligible (~5-10ms per write)
 
