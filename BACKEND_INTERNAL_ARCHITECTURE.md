@@ -66,34 +66,88 @@ HTTP Request → Middleware Chain → Route Handler → Database Layer → Respo
 
 ---
 
-### **1.2 Internal Architecture Diagram**
+### **1.2 Unified Architecture Diagram (Both User Stories)**
+
+**This diagram shows the complete end-to-end architecture supporting:**
+- 🎤 **User Story 1:** Microphone Mute Verification (Dual Verification: REST + WebSocket)
+- 🎧 **User Story 2:** In-Call Device Switching (REST)
 
 ```mermaid
 graph TB
-    Frontend["Frontend (React)<br/>━━━━━━━━━━━━━━━<br/>• audioService<br/>• backendService"] 
+    subgraph "Frontend Layer (React)"
+        AudioService["audioService.ts<br/>━━━━━━━━━━━━━━━<br/>• mute() / unmute()<br/>• verifyMuteState()<br/>• switchMicrophone()<br/><br/>🎤 US1 Method 1<br/>🎧 US2"]
+        AudioStreamService["audioStreamService.ts<br/>━━━━━━━━━━━━━━━━━━━<br/>• startStreaming()<br/>• Audio samples via WS<br/><br/>🎤 US1 Method 2"]
+        BackendService["backendService.ts<br/>━━━━━━━━━━━━━━━━━━━<br/>• updateMuteStatus()<br/>• updateMuteVerification()<br/>• updateDevice()<br/><br/>REST API Client"]
+    end
     
-    Middleware["Middleware Stack<br/>━━━━━━━━━━━━━━━<br/>• CORS<br/>• JSON parser<br/>• Logging<br/>• Metrics"]
+    subgraph "Backend Layer (Node.js + Express)"
+        Middleware["Middleware Stack<br/>━━━━━━━━━━━━━━━<br/>• CORS<br/>• JSON parser<br/>• Logging<br/>• Metrics"]
+        
+        RestRoutes["REST Route Handlers<br/>━━━━━━━━━━━━━━━━━━━<br/>🎤 PATCH /mute (US1)<br/>🎤 PATCH /verify (US1 Method 1)<br/>🎤 GET /packet-verification (US1 Method 2)<br/>🎧 PATCH /device (US2)<br/>POST /state, GET /users, etc."]
+        
+        WSServer["WebSocket Server<br/>━━━━━━━━━━━━━━━━━━━<br/>/audio-stream<br/><br/>🎤 US1 Method 2"]
+        
+        PacketVerifier["packet-verifier.js<br/>━━━━━━━━━━━━━━━━━━━<br/>• processAudioSamples()<br/>• analyzeForSilence()<br/>• RMS energy calculation<br/><br/>🎤 US1 Method 2"]
+    end
     
-    Routes["Route Handlers<br/>━━━━━━━━━━━━━━━<br/>• Validation<br/>• Orchestration<br/>• Error handling"]
+    subgraph "Data Layer"
+        DatabaseDAO["database.js<br/>━━━━━━━━━━━━━━━<br/>• DAO Pattern<br/>• createOrUpdateUserState()<br/>• getUserState()<br/>• Type conversion (INT↔bool)"]
+        
+        SQLite[("SQLite Database<br/>━━━━━━━━━━━━━━━━━━━<br/>audio-states.db<br/><br/>Fields:<br/>• userId, username<br/>• isMuted 🎤<br/>• verifiedMuted 🎤<br/>• packetVerifiedMuted 🎤<br/>• packetVerifiedAt 🎤<br/>• deviceId, deviceLabel 🎧<br/>• roomId<br/>• lastUpdated, createdAt<br/><br/>WAL Mode | Indexed")]
+    end
     
-    Database["database.js<br/>━━━━━━━━━━<br/>• DAO Pattern<br/>• CRUD ops"]
+    AudioService -->|"🎤 US1: Mute intent"| BackendService
+    AudioService -->|"🎤 US1 Method 1:<br/>Web Audio API result"| BackendService
+    AudioService -->|"🎧 US2: Device switch"| BackendService
     
-    DB[("SQLite<br/>━━━━━━━━━━<br/>audio-states.db")]
+    AudioStreamService -->|"🎤 US1 Method 2:<br/>WebSocket (Float32Array)<br/>~176 KB/s per user"| WSServer
     
-    Frontend -->|"HTTP/REST"| Middleware
-    Middleware -->|"Parsed request"| Routes
-    Routes -->|"Function calls<br/>getUserState()<br/>createOrUpdateUserState()"| Database
-    Database -->|"SQL queries"| DB
-    DB -->|"Data"| Database
-    Database -->|"Result"| Routes
-    Routes -->|"JSON response"| Frontend
+    BackendService -->|"HTTP/REST<br/>JSON payloads"| Middleware
     
-    style Frontend fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    Middleware -->|"Parsed request"| RestRoutes
+    
+    RestRoutes -->|"🎤🎧 Function calls:<br/>createOrUpdateUserState()"| DatabaseDAO
+    
+    WSServer -->|"Audio samples"| PacketVerifier
+    PacketVerifier -->|"🎤 Persist verification:<br/>packetVerifiedMuted,<br/>packetVerifiedAt"| DatabaseDAO
+    
+    DatabaseDAO -->|"SQL queries<br/>(Prepared statements)"| SQLite
+    SQLite -->|"Query results"| DatabaseDAO
+    DatabaseDAO -->|"UserState objects"| RestRoutes
+    RestRoutes -->|"JSON response"| BackendService
+    
+    style AudioService fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    style AudioStreamService fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    style BackendService fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
     style Middleware fill:#E1F5FE,stroke:#039BE5,stroke-width:2px
-    style Routes fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
-    style Database fill:#FFF9C4,stroke:#FBC02D,stroke-width:3px
-    style DB fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
+    style RestRoutes fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
+    style WSServer fill:#FFE0B2,stroke:#FF9800,stroke-width:3px
+    style PacketVerifier fill:#E1BEE7,stroke:#9C27B0,stroke-width:3px
+    style DatabaseDAO fill:#FFF9C4,stroke:#FBC02D,stroke-width:3px
+    style SQLite fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
 ```
+
+**Key Architecture Features:**
+
+| Feature | User Story 1 (Mute) | User Story 2 (Device) |
+|---------|---------------------|----------------------|
+| **Frontend Services** | `audioService.ts` (mute, verify)<br>`audioStreamService.ts` (streaming) | `audioService.ts` (switchMicrophone) |
+| **Backend Protocol** | REST (mute intent + Method 1 result)<br>WebSocket (Method 2 streaming) | REST (device selection) |
+| **Backend Modules** | `server.js` (REST routes)<br>`packet-verifier.js` (audio analysis) | `server.js` (REST routes) |
+| **Database Fields** | `isMuted`, `verifiedMuted`<br>`packetVerifiedMuted`, `packetVerifiedAt` | `deviceId`, `deviceLabel` |
+| **Critical Constraint** | **Preserves device during mute** | **Preserves mute during device switch** |
+
+**Dual Verification Flow (User Story 1):**
+1. **Method 1 (Frontend):** `audioService.verifyMuteState()` → Web Audio API → `PATCH /verify` → `verifiedMuted` field
+2. **Method 2 (Backend):** `audioStreamService.startStreaming()` → WebSocket → `packet-verifier.js` → `packetVerifiedMuted` + `packetVerifiedAt` fields
+
+**Cross-References:**
+- **Detailed dual verification flow:** [`CLASS_DIAGRAMS.md:1096-1136`](CLASS_DIAGRAMS.md#41-complete-dual-verification-flow-diagram)
+- **Module responsibilities table:** [`USER_STORIES_BACKEND_SPEC.md:1065-1075`](USER_STORIES_BACKEND_SPEC.md#-summary-module-responsibilities)
+- **Complete database schema:** [`STABLE_STORAGE_SPECIFICATION.md:36-94`](STABLE_STORAGE_SPECIFICATION.md#21-user_states-table-schema)
+- **REST API endpoints:** [`API_SPECIFICATION.md:155-991`](API_SPECIFICATION.md#3-rest-api-endpoints)
+- **WebSocket protocol:** [`API_SPECIFICATION.md:994-1280`](API_SPECIFICATION.md#4-websocket-api)
+- **Internal dual verification architecture:** [Section 4.2](#42-internal-architecture-diagram) (this document)
 
 ---
 
