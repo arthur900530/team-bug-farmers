@@ -71,7 +71,7 @@ HTTP Request → Middleware Chain → Route Handler → Database Layer → Respo
 graph TB
     Frontend["Frontend (React)<br/>━━━━━━━━━━━━━━━<br/>• audioService<br/>• backendService"] 
     
-    Backend["Backend API (Express)<br/>━━━━━━━━━━━━━━━━━━━<br/>• Middleware (CORS, Logging)<br/>• Routes (User Story 1 & 2)<br/>• Controllers (Validation)<br/>• database.js module"]
+    Backend["Backend API (Express)<br/>━━━━━━━━━━━━━━━━━━━<br/>• Middleware (CORS, Logging)<br/>• Routes (User Story 1 & 2)<br/>• database.js module"]
     
     DB[("SQLite Database<br/>━━━━━━━━━━━━━<br/>audio-states.db<br/><br/>user_states table")]
     
