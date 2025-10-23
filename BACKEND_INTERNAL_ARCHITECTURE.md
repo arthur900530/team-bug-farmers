@@ -982,6 +982,8 @@ queue.add('updateMuteStatus', userId, true);
 ├─────────────────────────────────────────────┤
 │  Service Layer (backendService.ts)          │  ← API abstraction
 ├─────────────────────────────────────────────┤
+│  Middleware Layer (CORS, Logging, Metrics)  │  ← Validation logic
+├─────────────────────────────────────────────┤
 │  Application Layer (server.js routes)       │  ← Business logic
 ├─────────────────────────────────────────────┤
 │  Data Access Layer (database.js)            │  ← Persistence
@@ -1043,11 +1045,11 @@ function getUserState(userId) {
 | Decision | Complexity | Performance @ 10 Users | Scalability | Maintainability | Cost |
 |----------|------------|------------------------|-------------|-----------------|------|
 | 3-Tier Architecture | Medium | Good | Good | Excellent | Free |
-| Synchronous DB | Low | **Good** (blocking acceptable) | ⚠️ Limited (refactor @ 100+) | Excellent | Free |
+| Synchronous DB | Low | Excellent (blocking acceptable) | ⚠️ Limited (refactor @ 100+) | Excellent | Free |
 | Separate Endpoints | Medium | Good | Good | Good | Free |
-| No Connection Pool | Low | Good (pooling unnecessary) | Good (w/ SQLite) | Excellent | Free |
+| No Connection Pool | Low | Good (pooling unnecessary) | ⚠️ Limited | Excellent | Free |
 | WAL Mode | Low | Good (~30% faster writes) | Good | Excellent | Free |
-| Return Null Pattern | Low | Excellent | Excellent | Good | Free |
+| Return Null Pattern | Low | Excellent | Excellent | ⚠️ Limited | Free |
 | TypeScript Interfaces | Medium | Excellent | Excellent | Excellent | Free |
 | No Request Queue | Low | N/A | ⚠️ Limited (no retry) | Excellent | Free |
 
@@ -1062,31 +1064,29 @@ function getUserState(userId) {
 
 **Dual Independent Verification Pattern:**
 
-Module 4 implements User Story 1's hardware verification requirement using **two independent verification methods** to satisfy the auditor's requirement for "two separate ways to verify mute":
+Module 4 implements User Story 1's hardware verification requirement using **two verification methods** to satisfy the auditor's requirement for "two separate ways to verify mute":
 
-1. **Method 1 (Frontend):** Web Audio API check - Frontend analyzes audio frequency data
-2. **Method 2 (Backend):** Packet inspection - Backend analyzes raw audio samples via WebSocket
+1. **Method 1 (Client-Side Check)**: Web Audio API analysis - Frontend self-reports verification
+2. **Method 2 (Backend Verification)**: Audio stream analysis - Backend independently verifies via WebSocket
 
 **Architecture Rationale:**
-
-This dual-method approach provides defense-in-depth verification:
-- **Method 1** is fast (500ms delay) but can be spoofed by malicious frontend
-- **Method 2** is continuous and backend-controlled, providing tamper-proof verification
-- Combined, they offer high-confidence mute verification
+- **Method 1** is fast (500ms) but client-reported (untrusted)
+- **Method 2** is continuous and backend-controlled (trusted, tamper-proof)
+- Method 2 provides cryptographic-level confidence; Method 1 is for user convenience
 
 **Three-Field State Model:**
 ```javascript
 {
   isMuted: boolean,                   // User intent (button clicked)
-  verifiedMuted: boolean|null,        // Method 1 verification (Web Audio API)
-  packetVerifiedMuted: boolean|null   // Method 2 verification (Packet inspection)
+  clientReportedVerified: boolean|null, // Method 1 (client self-check, untrusted)
+  verifiedMuted: boolean|null         // Method 2 (backend verification, trusted)
 }
 ```
 
 **Data Flow:**
 ```
-Method 1: audioService → Web Audio API → verifiedMuted (database)
-Method 2: audioStreamService → WebSocket → packet-verifier.js → packetVerifiedMuted (database)
+Method 1: audioService → Web Audio API → clientReportedVerified (stored for UX)
+Method 2: audioStreamService → WebSocket → stream-verifier.js → verifiedMuted (source of truth)
 ```
 
 **Both verification results are now persisted to SQLite for crash resilience.**
@@ -1101,40 +1101,40 @@ This separation allows the system to:
 
 ```mermaid
 graph TB
-    subgraph "Method 1: Web Audio API Check"
+    subgraph "Method 1: Client Self-Check"
         AudioService1["audioService.ts<br/>━━━━━━━━━━━━━━<br/>verifyMuteState()"]
         WebAudioAPI["Web Audio API<br/>━━━━━━━━━━━━━━━<br/>getByteFrequencyData()"]
-        BackendService1["backendService.ts<br/>━━━━━━━━━━━━━━━<br/>updateMuteVerification()<br/>PATCH /verify"]
+        BackendService1["backendService.ts<br/>━━━━━━━━━━━━━━━<br/>updateClientVerification()<br/>PATCH /client-verify"]
     end
     
-    subgraph "Method 2: Packet Inspection"
+    subgraph "Method 2: Backend Verification"
         AudioStreamService["audioStreamService.ts<br/>━━━━━━━━━━━━━━━━━━━━<br/>ScriptProcessorNode<br/>WebSocket streaming"]
         WebSocket["WebSocket<br/>━━━━━━━━━━<br/>/audio-stream<br/>Float32Array samples"]
-        PacketVerifier["packet-verifier.js<br/>━━━━━━━━━━━━━━━<br/>RMS energy analysis<br/>Silence detection"]
+        StreamVerifier["stream-verifier.js<br/>━━━━━━━━━━━━━━━<br/>RMS energy analysis<br/>Silence detection<br/>(Backend-controlled)"]
     end
     
     subgraph "Backend Storage"
-        Server["server.js<br/>━━━━━━━━━━<br/>/verify endpoint<br/>/packet-verification"]
-        DB[("SQLite Database<br/>━━━━━━━━━━━━━━━<br/>user_states table<br/><br/>verifiedMuted<br/>packetVerifiedMuted<br/>packetVerifiedAt")]
+        Server["server.js<br/>━━━━━━━━━━<br/>/client-verify endpoint<br/>/verification-status"]
+        DB[("SQLite Database<br/>━━━━━━━━━━━━━━━<br/>user_states table<br/><br/>clientReportedVerified<br/>verifiedMuted<br/>verifiedAt")]
     end
     
     AudioService1 -->|"Read frequency data"| WebAudioAPI
     WebAudioAPI -->|"Audio level"| AudioService1
-    AudioService1 -->|"Result: true/false"| BackendService1
+    AudioService1 -->|"Result (untrusted)"| BackendService1
     BackendService1 -->|"HTTP PATCH"| Server
-    Server -->|"Store Method 1 result"| DB
+    Server -->|"Store client report"| DB
     
     AudioStreamService -->|"Continuous audio samples"| WebSocket
-    WebSocket -->|"Float32Array"| PacketVerifier
-    PacketVerifier -->|"Persist Method 2 result"| DB
-    Server -->|"GET /packet-verification"| DB
+    WebSocket -->|"Float32Array"| StreamVerifier
+    StreamVerifier -->|"Persist verified result<br/>(trusted)"| DB
+    Server -->|"GET /verification-status"| DB
     
     style AudioService1 fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
     style WebAudioAPI fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
     style BackendService1 fill:#FFF9C4,stroke:#FBC02D,stroke-width:3px
     style AudioStreamService fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
     style WebSocket fill:#FFE0B2,stroke:#FF9800,stroke-width:3px
-    style PacketVerifier fill:#E1BEE7,stroke:#9C27B0,stroke-width:3px
+    style StreamVerifier fill:#E1BEE7,stroke:#9C27B0,stroke-width:3px
     style Server fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
     style DB fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
 ```
@@ -1143,9 +1143,9 @@ graph TB
 
 #### **Decision 1: Why Dual Verification Instead of Single Method?**
 
-**Choice:** Implement TWO independent verification methods (Web Audio API + Packet Inspection)
+**Choice:** Two different verification methods (Web Audio API + Stream Analysis)
 
-**Rationale:** Auditor requirement for "two separate ways to verify mute" necessitates independent verification paths that don't share common failure modes.
+**Rationale:** Auditor requirement for "two separate ways to verify mute" necessitates verification paths that don't share common failure modes.
 
 **Why Two Methods?**
 
@@ -1155,7 +1155,6 @@ graph TB
 | **Network Failure** | ✅ Works offline | ❌ Requires WebSocket | ✅ Graceful degradation |
 | **Performance** | ✅ Fast (500ms) | ⚠️ Continuous (~176 KB/s) | ⚠️ Higher bandwidth |
 | **Tampering Detection** | ❌ No detection | ✅ Backend sees truth | ✅ Conflict flagged |
-| **Complexity** | ✅ Simple | ⚠️ WebSocket + parser | ⚠️ More components |
 
 **Decision Matrix:**
 ```
@@ -1176,22 +1175,23 @@ Method 1 = null,  Method 2 = true   → ✓  Backend verification only
 
 ---
 
-#### **Decision 2: Why Separate `isMuted` and `verifiedMuted` Fields?**
+#### **Decision 2: Why Three Separate Fields?
 
-**Choice:** Two boolean fields instead of single enum
+**Choice:** Three fields: `isMuted`, `clientReportedVerified`, `verifiedMuted`
 
-**Rationale:** Separation allows capturing **intent** vs **verified reality**, enabling rich UI states and supporting the dual verification system.
+**Rationale:** Separation captures intent vs. reality and distinguishes trusted vs. untrusted verification.
 
 **Field Semantics:**
-- `isMuted`: What the user clicked (intent)
-- `verifiedMuted`: What both verification methods confirmed (reality)
+- `isMuted`: User intent (button clicked)
+- `clientReportedVerified`: Method 1 self-check (untrusted, for UX speed)
+- `verifiedMuted`: Method 2 backend verification (trusted, source of truth)
 
 **State Matrix:**
 ```
-isMuted=true,  verifiedMuted=true   → ✓ Verified muted (both methods agree)
-isMuted=true,  verifiedMuted=false  → ⚠️ Conflict (at least one method failed)
-isMuted=true,  verifiedMuted=null   → ⏳ Verifying... (waiting for results)
-isMuted=false, verifiedMuted=*      → Unmuted (no verification needed)
+isMuted=true, clientReported=true, verifiedMuted=true   → ✓✓ Fully verified
+isMuted=true, clientReported=true, verifiedMuted=false  → ⚠️  Tampering detected
+isMuted=true, clientReported=null, verifiedMuted=true   → ✓  Backend-verified only
+isMuted=false, *                                        → Unmuted (no verification)
 ```
 
 **Storage Strategy:**
@@ -1201,17 +1201,17 @@ isMuted=false, verifiedMuted=*      → Unmuted (no verification needed)
 
 **Alternatives:**
 
-| Approach | Pros | Cons | Decision |
-|----------|------|------|----------|
-| Two booleans (chosen) | Clear semantics, easy SQL queries | Two columns | ✅ **Chosen** - Clearest model |
-| Three fields (isMuted, method1, method2) | Explicit tracking | Three columns, more complex | ❌ Over-engineered |
-| Enum `status` | Single column | Can't distinguish intent from verification | ❌ Lossy information |
+| Approach | Decision |
+|----------| ----------|
+| Three fields (chosen) | ✅ Clear trust boundaries |
+| Two fields (isMuted + verifiedMuted) | ❌ Can't distinguish verification sources |
+| Enum `status` | ❌ Lossy, can't capture conflicts |
 
 ---
 
 #### **Decision 3: Why WebSocket for Method 2?**
 
-**Choice:** Use WebSocket (not HTTP polling) for audio sample streaming
+**Choice:** WebSocket for continuous audio sample streaming
 
 **Rationale:** WebSocket provides the bidirectional, low-latency, continuous connection required for real-time audio packet inspection.
 
@@ -1219,11 +1219,10 @@ isMuted=false, verifiedMuted=*      → Unmuted (no verification needed)
 
 | Requirement | HTTP Polling | WebSocket (Chosen) |
 |-------------|-------------|-------------------|
-| **Continuous streaming** | ❌ Must reconnect per sample | ✅ Persistent connection |
+| **Continuous streaming** | ❌ Reconnect per sample | ✅ Persistent connection |
 | **Latency** | ⚠️ ~100-500ms per request | ✅ ~10-50ms per message |
-| **Bandwidth efficiency** | ❌ Headers per request (~500 bytes) | ✅ Minimal framing (~2 bytes) |
-| **Backend push** | ❌ Client must poll | ✅ Server pushes verification results |
-| **Overhead** | ❌ TCP handshake per request | ✅ Single handshake |
+| **Bandwidth efficiency** | ❌ 500 byte headers | ✅ Minimal framing (~2 bytes) |
+| **Server push** | ❌ Client polls | ✅ Push results |
 
 **Bandwidth Calculation:**
 ```
@@ -1281,23 +1280,21 @@ Threshold | False Positives | False Negatives
 
 ---
 
-#### **Decision 5: Why Method 1 Has 500ms Delay but Method 2 is Continuous?**
+#### **Decision 5: Why Different Timing Strategies?**
 
-**Choice:** Method 1 waits 500ms after mute; Method 2 streams continuously
+**Choice:** Method 1 one-time (500ms delay), Method 2 continuous
 
-**Rationale:** Different verification methods have different timing characteristics and purposes.
+**Rationale:** Complementary timing provides better coverage.
 
-**Method 1 (Web Audio API):**
-- **Purpose:** Quick verification after user action
-- **Timing:** One-time check, 500ms after mute
-- **Why 500ms?** Hardware needs settle time (tested empirically)
-- **Trade-off:** Fast but one-time (doesn't catch later unmute)
+**Method 1:** Quick verification after user action
+- One-time check, 500ms after mute
+- Hardware needs settle time
+- Trade-off: Fast but doesn't catch later changes
 
-**Method 2 (Packet Inspection):**
-- **Purpose:** Continuous monitoring, tamper detection
-- **Timing:** Real-time, ~100ms update frequency
-- **Why Continuous?** Detects external hardware unmute immediately
-- **Trade-off:** Higher bandwidth but catches everything
+**Method 2:** Continuous monitoring
+- Real-time, ~100ms updates
+- Detects hardware unmute immediately
+- Trade-off: Higher bandwidth but catches everything
 
 **Complementary Benefits:**
 ```
@@ -1310,9 +1307,8 @@ Malicious client spoofs        | ✗ Fooled | ✓ Catches| ⚠️  Conflict flag
 ```
 
 **Why Not Both Continuous?**
-- Method 1 continuous would waste CPU (analyser processing)
-- Method 2 already provides continuous monitoring
-- Complementary timing strategies provide better coverage
+- Method 1 continuous wastes CPU
+- Method 2 already provides continuous coverage.
 
 ---
 
