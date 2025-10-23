@@ -16,7 +16,7 @@ This document catalogs all declarations across backend and frontend modules, cat
 - 🔒 **Private/Internal:** Not exported - Implementation details
 
 **Module Count:**
-- **Backend Modules:** 4 core modules (server, database, packet-verifier, metrics) + 1 skeleton (aws-config)
+- **Backend Modules:** 4 core modules (server, database, stream-verifier, metrics) + 1 skeleton (aws-config)
 - **Frontend Modules:** 3 service modules (backendService, audioService, audioStreamService)
 
 ---
@@ -50,7 +50,7 @@ This document catalogs all declarations across backend and frontend modules, cat
 🔒 deleteUserState (from './database.js')
 🔒 metricsMiddleware (from './metrics.js')
 🔒 getMetricsHandler (from './metrics.js')
-🔒 initializePacketVerifier (from './packet-verifier.js')
+🔒 initializePacketVerifier (from './stream-verifier.js')
 ```
 
 ---
@@ -84,8 +84,8 @@ This document catalogs all declarations across backend and frontend modules, cat
 | Create/update user handler | POST | `/api/users/:userId/state` | Upsert user state | 🔒 Private (route) |
 | Update mute handler | PATCH | `/api/users/:userId/mute` | Update mute only | 🔒 Private (route) |
 | Update device handler | PATCH | `/api/users/:userId/device` | Update device only | 🔒 Private (route) |
-| Update verification handler | PATCH | `/api/users/:userId/verify` | Update Web Audio verification | 🔒 Private (route) |
-| Get packet verification handler | GET | `/api/users/:userId/packet-verification` | Get packet verification | 🔒 Private (route) |
+| Update verification handler | PATCH | `/api/users/:userId/client-verify` | Update client self-check | 🔒 Private (route) |
+| Get verification status | GET | `/api/users/:userId/verification-status` | Get packet verification | 🔒 Private (route) |
 | Delete user handler | DELETE | `/api/users/:userId` | Delete user state | 🔒 Private (route) |
 | Get room users handler | GET | `/api/rooms/:roomId/users` | Get users in room | 🔒 Private (route) |
 
@@ -155,11 +155,11 @@ This document catalogs all declarations across backend and frontend modules, cat
 **Side Effects:**
 - Creates `user_states` table if not exists
 - Creates indexes on `roomId`, `lastUpdated`, `username`
-- Adds new columns for backward compatibility (username, verifiedMuted, packetVerifiedMuted, packetVerifiedAt)
+- Adds new columns for backward compatibility (username, verifiedMuted, verifiedMuted, verifiedAt)
 
 **Schema Created:**
 - Table: `user_states`
-- Columns: 11 fields (userId, username, isMuted, verifiedMuted, packetVerifiedMuted, packetVerifiedAt, deviceId, deviceLabel, roomId, lastUpdated, createdAt)
+- Columns: 12 fields (userId, username, clientReportedVerified, verifiedMuted, verifiedAt, verifiedMuted, verifiedAt, deviceId, deviceLabel, roomId, lastUpdated, createdAt)
 - Indexes: 3 (idx_roomId, idx_lastUpdated, idx_username)
 
 **Implementation Reference:** [`backend/database.js:17-72`](backend/database.js)
@@ -186,9 +186,9 @@ This document catalogs all declarations across backend and frontend modules, cat
   userId: string;
   username: string;
   isMuted: boolean;
+  clientReportedVerified: boolean | null;
   verifiedMuted: boolean | null;
-  packetVerifiedMuted: boolean | null;
-  packetVerifiedAt: string | null;
+  verifiedAt: string | null;
   deviceId: string | null;
   deviceLabel: string | null;
   roomId: string | null;
@@ -223,9 +223,9 @@ This document catalogs all declarations across backend and frontend modules, cat
   userId: string,
   username: string,
   isMuted: boolean,
+  clientReportedVerified: boolean | null,
   verifiedMuted: boolean | null,
-  packetVerifiedMuted: boolean | null,
-  packetVerifiedAt: string | null,
+  verifiedAt: string | null,
   deviceId: string | null,
   deviceLabel: string | null,
   roomId: string | null
@@ -308,7 +308,7 @@ This document catalogs all declarations across backend and frontend modules, cat
 
 ---
 
-### **1.3 Module: `backend/packet-verifier.js`**
+### **1.3 Module: `backend/stream-verifier.js`**
 
 **Purpose:** WebSocket server for audio packet streaming and silence detection  
 **Architecture:** Class-based with single exported initialization function  
@@ -381,10 +381,10 @@ This document catalogs all declarations across backend and frontend modules, cat
 1. Store audio samples in in-memory ring buffer (last 1 second)
 2. Calculate RMS energy across all buffered samples
 3. Compare RMS to `SILENCE_THRESHOLD` (0.01)
-4. Persist result to database (`packetVerifiedMuted`, `packetVerifiedAt`)
+4. Persist result to database (`verifiedMuted`, `verifiedAt`)
 5. Log verification result
 
-**Implementation Reference:** [`backend/packet-verifier.js:38-85`](backend/packet-verifier.js)
+**Implementation Reference:** [`backend/stream-verifier.js:38-85`](backend/stream-verifier.js)
 
 ---
 
@@ -408,7 +408,7 @@ RMS = sqrt(sum(sample^2) / count)
 isSilent = RMS < 0.01
 ```
 
-**Implementation Reference:** [`backend/packet-verifier.js:87-117`](backend/packet-verifier.js)
+**Implementation Reference:** [`backend/stream-verifier.js:87-117`](backend/stream-verifier.js)
 
 ---
 
@@ -416,8 +416,8 @@ isSilent = RMS < 0.01
 
 ```javascript
 🔒 getVerificationResult(userId: string): {
-  packetVerifiedMuted: boolean | null,
-  packetVerifiedAt: string | null
+  verifiedMuted: boolean | null,
+  verifiedAt: string | null
 } | null
 ```
 
@@ -431,7 +431,7 @@ isSilent = RMS < 0.01
 - Object with verification data if user found and data is fresh (< 5 seconds old)
 - `null` if user not found or data is stale
 
-**Implementation Reference:** [`backend/packet-verifier.js:124-148`](backend/packet-verifier.js)
+**Implementation Reference:** [`backend/stream-verifier.js:124-148`](backend/stream-verifier.js)
 
 ---
 
@@ -451,7 +451,7 @@ isSilent = RMS < 0.01
 
 **Periodicity:** Called automatically by WebSocket server
 
-**Implementation Reference:** [`backend/packet-verifier.js:155-168`](backend/packet-verifier.js)
+**Implementation Reference:** [`backend/stream-verifier.js:155-168`](backend/stream-verifier.js)
 
 ---
 
@@ -498,7 +498,7 @@ isSilent = RMS < 0.01
 - `close`: Client disconnects
 - `error`: Connection error
 
-**Implementation Reference:** [`backend/packet-verifier.js:176-226`](backend/packet-verifier.js)
+**Implementation Reference:** [`backend/stream-verifier.js:176-226`](backend/stream-verifier.js)
 
 **Cross-Reference:** See [`API_SPECIFICATION.md:994-1280`](API_SPECIFICATION.md) for WebSocket API specification.
 
@@ -725,8 +725,8 @@ All functions are **skeleton implementations** that log to console:
   username: string;
   isMuted: boolean;
   verifiedMuted: boolean | null;
-  packetVerifiedMuted: boolean | null;
-  packetVerifiedAt: string | null;
+  verifiedMuted: boolean | null;
+  verifiedAt: string | null;
   deviceId: string | null;
   deviceLabel: string | null;
   roomId: string | null;
@@ -828,7 +828,7 @@ All functions are **skeleton implementations** that log to console:
 
 **Visibility:** 🌐 **Externally Visible** (exported)  
 **Purpose:** Report Web Audio API verification result to backend  
-**HTTP:** `PATCH /api/users/${userId}/verify`  
+**HTTP:** `PATCH /api/users/${userId}/client-verify`  
 **Returns:** `UserState` object or `null` on error
 
 **Implementation Reference:** [`src/services/backendService.ts:137-165`](src/services/backendService.ts)
@@ -1403,7 +1403,7 @@ audioStreamService.startStreaming(stream);
 |--------|---------|-------------------|------------------|-----------------|----------------|
 | **server.js** | 0 | 0 | 11 route handlers + 2 middleware | 0 | 7 |
 | **database.js** | 0 | 7 | 0 | 0 | 3 |
-| **packet-verifier.js** | 1 (private) | 1 | 5 class methods | 0 | 2 |
+| **stream-verifier.js** | 1 (private) | 1 | 5 class methods | 0 | 2 |
 | **metrics.js** | 0 | 3 | 1 | 0 | 3 |
 | **aws-config.js** | 0 | 5 (all mock) | 0 | 1 (config object) | 0 |
 
@@ -1449,9 +1449,9 @@ audioStreamService.startStreaming(stream);
 Backend Module Dependencies:
 server.js → database.js (CRUD operations)
           → metrics.js (middleware)
-          → packet-verifier.js (WebSocket)
+          → stream-verifier.js (WebSocket)
 
-packet-verifier.js → database.js (persist verification)
+stream-verifier.js → database.js (persist verification)
 
 Frontend Module Dependencies:
 App.tsx → backendService.ts (API calls)
@@ -1502,7 +1502,7 @@ backendService.ts → (No internal dependencies)
 ### **4.5 Consistency with DATA_ABSTRACTIONS.md**
 
 ✅ **Verified:** `database.js` functions match data abstraction spec [`DATA_ABSTRACTIONS.md:9-73`](DATA_ABSTRACTIONS.md)  
-✅ **Verified:** `packet-verifier.js` architecture matches [`DATA_ABSTRACTIONS.md:76-126`](DATA_ABSTRACTIONS.md)  
+✅ **Verified:** `stream-verifier.js` architecture matches [`DATA_ABSTRACTIONS.md:76-126`](DATA_ABSTRACTIONS.md)  
 ✅ **Verified:** API response format matches [`DATA_ABSTRACTIONS.md:130-174`](DATA_ABSTRACTIONS.md)
 
 ---
@@ -1516,7 +1516,7 @@ backendService.ts → (No internal dependencies)
    - Minimal state
    - Clear separation of concerns
 
-2. **Factory Pattern** (`packet-verifier.js`)
+2. **Factory Pattern** (`stream-verifier.js`)
    - Private class
    - Exported initialization function
    - Encapsulation of complexity
@@ -1542,7 +1542,7 @@ backendService.ts → (No internal dependencies)
 
 3. **Strategy Pattern** (Dual Verification)
    - Method 1: `audioService.verifyMuteState()`
-   - Method 2: `audioStreamService` + `packet-verifier.js`
+   - Method 2: `audioStreamService` + `stream-verifier.js`
    - Independent, complementary strategies
 
 ---
@@ -1553,7 +1553,7 @@ backendService.ts → (No internal dependencies)
 
 - [`backend/server.js`](backend/server.js) - Express server and routes
 - [`backend/database.js`](backend/database.js) - SQLite DAO
-- [`backend/packet-verifier.js`](backend/packet-verifier.js) - WebSocket server
+- [`backend/stream-verifier.js`](backend/stream-verifier.js) - WebSocket server
 - [`backend/metrics.js`](backend/metrics.js) - Metrics collection
 - [`backend/aws-config.js`](backend/aws-config.js) - AWS config (skeleton)
 - [`src/services/backendService.ts`](src/services/backendService.ts) - REST client
