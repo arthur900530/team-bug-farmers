@@ -5,9 +5,11 @@
  * This provides backend-side verification independent of Web Audio API
  * 
  * Architecture: WebSocket receives Float32Array audio samples → Analyze for silence
+ * Storage: Verification results persisted to SQLite database
  */
 
 import { WebSocketServer } from 'ws';
+import { createOrUpdateUserState, getUserState } from './database.js';
 
 // Audio analysis thresholds
 const SILENCE_THRESHOLD = 0.01;  // Audio level below 1% = silence
@@ -19,15 +21,13 @@ const VERIFICATION_WINDOW_MS = 1000;  // Analyze 1 second of audio data
  */
 class AudioPacketVerifier {
   constructor() {
-    // Store audio data buffers per user
+    // Store audio data buffers per user (in-memory only - not persisted)
     // Map<userId, { samples: Float32Array[], lastUpdate: timestamp }>
     this.userAudioBuffers = new Map();
     
-    // Verification results cache
-    // Map<userId, { isVerifiedMuted: boolean, lastVerified: timestamp }>
-    this.verificationCache = new Map();
+    // Verification results are now persisted to database (no in-memory cache)
     
-    console.log('✅ Audio Packet Verifier initialized');
+    console.log('✅ Audio Packet Verifier initialized (with SQLite persistence)');
   }
 
   /**
@@ -59,13 +59,27 @@ class AudioPacketVerifier {
     // Perform verification analysis
     const isVerifiedMuted = this.analyzeForSilence(buffer.samples);
     
-    // Cache result
-    this.verificationCache.set(userId, {
-      isVerifiedMuted,
-      lastVerified: Date.now()
-    });
+    // Persist result to database
+    try {
+      const currentState = getUserState(userId);
+      if (currentState) {
+        createOrUpdateUserState({
+          userId: currentState.userId,
+          username: currentState.username,
+          isMuted: currentState.isMuted,
+          verifiedMuted: currentState.verifiedMuted,
+          packetVerifiedMuted: isVerifiedMuted,
+          packetVerifiedAt: new Date().toISOString(),
+          deviceId: currentState.deviceId,
+          deviceLabel: currentState.deviceLabel,
+          roomId: currentState.roomId
+        });
+      }
+    } catch (error) {
+      console.error(`Error persisting packet verification for ${userId}:`, error);
+    }
 
-    console.log(`🎤 User ${userId}: Packet analysis = ${isVerifiedMuted ? 'MUTED ✓' : 'ACTIVE'}`);
+    console.log(`🎤 User ${userId}: Packet analysis = ${isVerifiedMuted ? 'MUTED ✓' : 'ACTIVE'} (persisted to DB)`);
     
     return isVerifiedMuted;
   }
@@ -103,43 +117,54 @@ class AudioPacketVerifier {
   }
 
   /**
-   * Get cached verification result for user
+   * Get verification result for user from database
    * @param {string} userId 
-   * @returns {{isVerifiedMuted: boolean, lastVerified: number} | null}
+   * @returns {{packetVerifiedMuted: boolean | null, packetVerifiedAt: string | null} | null}
    */
   getVerificationResult(userId) {
-    const result = this.verificationCache.get(userId);
-    
-    if (!result) {
+    try {
+      const userState = getUserState(userId);
+      
+      if (!userState || !userState.packetVerifiedAt) {
+        return null;
+      }
+
+      // Check if result is stale (>5 seconds old)
+      const lastVerified = new Date(userState.packetVerifiedAt).getTime();
+      const age = Date.now() - lastVerified;
+      if (age > 5000) {
+        console.warn(`⚠️  User ${userId}: Verification result is stale (${age}ms old)`);
+        return null;
+      }
+
+      return {
+        packetVerifiedMuted: userState.packetVerifiedMuted,
+        packetVerifiedAt: userState.packetVerifiedAt
+      };
+    } catch (error) {
+      console.error(`Error fetching verification result for ${userId}:`, error);
       return null;
     }
-
-    // Check if result is stale (>5 seconds old)
-    const age = Date.now() - result.lastVerified;
-    if (age > 5000) {
-      console.warn(`⚠️  User ${userId}: Verification result is stale (${age}ms old)`);
-      return null;
-    }
-
-    return result;
   }
 
   /**
    * Clean up old user data
    * Call this periodically to prevent memory leaks
+   * Note: Only audio buffers are in-memory; verification results are in database
    */
   cleanup() {
     const now = Date.now();
     const TIMEOUT_MS = 30000;  // 30 seconds
 
-    // Remove inactive users
+    // Remove inactive users' audio buffers
     for (const [userId, buffer] of this.userAudioBuffers.entries()) {
       if (now - buffer.lastUpdate > TIMEOUT_MS) {
         this.userAudioBuffers.delete(userId);
-        this.verificationCache.delete(userId);
-        console.log(`🧹 Cleaned up inactive user: ${userId}`);
+        console.log(`🧹 Cleaned up inactive user audio buffer: ${userId}`);
       }
     }
+    
+    // Verification results remain in database (no cleanup needed here)
   }
 }
 

@@ -1067,7 +1067,7 @@ public verifyMuteState(): boolean {
 | Module | User Story 1 (Mute) | User Story 1 (Verification Method 1) | User Story 1 (Verification Method 2) | User Story 2 (Device) |
 |--------|---------------------|--------------------------------------|-------------------------------------|----------------------|
 | **server.js** | `PATCH /api/users/:userId/mute`<br>Stores mute intent (`isMuted`) | `PATCH /api/users/:userId/verify`<br>Stores Web Audio API result | WebSocket `/audio-stream`<br>`GET /packet-verification`<br>Packet inspection | `PATCH /api/users/:userId/device`<br>Stores device selection<br>**Preserves mute status** |
-| **database.js** | `createOrUpdateUserState()`<br>Persists `isMuted` field | `createOrUpdateUserState()`<br>Persists `verifiedMuted` field | (Packet results cached in memory) | `createOrUpdateUserState()`<br>Persists `deviceId`, `deviceLabel`<br>**Does NOT reset mute** |
+| **database.js** | `createOrUpdateUserState()`<br>Persists `isMuted` field | `createOrUpdateUserState()`<br>Persists `verifiedMuted` field | `createOrUpdateUserState()`<br>Persists `packetVerifiedMuted` + `packetVerifiedAt` fields | `createOrUpdateUserState()`<br>Persists `deviceId`, `deviceLabel`<br>**Does NOT reset mute** |
 | **backendService.ts** | `updateMuteStatus()`<br>Sends mute intent | `updateMuteVerification()`<br>Sends Web Audio API result | (Uses audioStreamService) | `updateDevice()`<br>Sends device to backend |
 | **audioService.ts** | `mute()`, `unmute()`<br>Controls hardware | `verifyMuteState()`<br>Web Audio API check | (N/A) | `switchMicrophone()`<br>Changes input device |
 | **audioStreamService.ts** | (N/A) | (N/A) | `startStreaming()`<br>Sends audio samples via WebSocket<br>`onVerification()` callback | (N/A) |

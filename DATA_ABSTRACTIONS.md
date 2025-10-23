@@ -12,7 +12,7 @@
 
 A user's audio and device state in a meeting, including:
 - User identity (userId, username)
-- Mute status (user intent + verification result)
+- Mute status (user intent + dual verification results)
 - Audio device selection
 - Meeting room membership
 - Temporal information (creation and last update timestamps)
@@ -21,25 +21,31 @@ A user's audio and device state in a meeting, including:
 
 ```javascript
 {
-  userId: string,           // Primary key
+  userId: string,                    // Primary key
   username: string,
-  isMuted: 0 | 1,          // SQLite INTEGER (0 = false, 1 = true)
-  verifiedMuted: 0 | 1 | null,  // SQLite INTEGER or NULL
+  isMuted: 0 | 1,                    // SQLite INTEGER (0 = false, 1 = true)
+  verifiedMuted: 0 | 1 | null,       // SQLite INTEGER or NULL (Web Audio API verification)
+  packetVerifiedMuted: 0 | 1 | null, // SQLite INTEGER or NULL (Packet inspection verification)
+  packetVerifiedAt: string | null,   // ISO 8601 timestamp of last packet verification
   deviceId: string | null,
   deviceLabel: string | null,
   roomId: string | null,
-  lastUpdated: string,     // ISO 8601 timestamp
-  createdAt: string        // ISO 8601 timestamp
+  lastUpdated: string,               // ISO 8601 timestamp
+  createdAt: string                  // ISO 8601 timestamp
 }
 ```
 
-**Storage:** SQLite table `user_states` with indexes on `roomId`, `lastUpdated`, `username`
+**Stable Storage:** SQLite database file `audio-states.db` with indexes on `roomId`, `lastUpdated`, `username`
 
 ### **Abstraction Function**
 
 AF(r) = A user state where:
 - Identity: (r.userId, r.username)
-- Mute: user clicked mute if r.isMuted = 1, hardware verified muted if r.verifiedMuted = 1
+- Mute: user clicked mute if r.isMuted = 1
+- Verification: 
+  - Web Audio API verified muted if r.verifiedMuted = 1
+  - Packet inspection verified muted if r.packetVerifiedMuted = 1
+  - Last packet verification at r.packetVerifiedAt
 - Device: currently using device (r.deviceId, r.deviceLabel) if non-null
 - Location: in meeting room r.roomId if non-null
 - Timeline: created at r.createdAt, last modified at r.lastUpdated
@@ -50,9 +56,13 @@ AF(r) = A user state where:
 - `username`: non-empty string
 - `isMuted` ∈ {0, 1}
 - `verifiedMuted` ∈ {0, 1, null}
+- `packetVerifiedMuted` ∈ {0, 1, null}
+- `packetVerifiedAt`: valid ISO 8601 timestamp string or null
+- If `packetVerifiedMuted` is non-null, then `packetVerifiedAt` must be non-null
 - `deviceId`, `deviceLabel`, `roomId`: string or null (nullable fields)
 - `lastUpdated`, `createdAt`: valid ISO 8601 timestamp strings
 - `lastUpdated` ≥ `createdAt` (chronological order)
+- `packetVerifiedAt` ≤ current time (no future timestamps)
 
 ### **Safety from Rep Exposure**
 
@@ -72,40 +82,48 @@ Per-user audio stream analysis tracking whether a user's microphone is actually 
 ### **Representation**
 
 ```javascript
-// Audio sample buffers per user
+// In-memory: Audio sample buffers per user (transient)
 Map<userId, {
   samples: Float32Array[],  // Ring buffer of audio samples
   lastUpdate: number        // Unix timestamp (ms)
 }>
 
-// Verification results cache
-Map<userId, {
-  isVerifiedMuted: boolean,  // true = silence detected, false = audio detected
-  lastVerified: number       // Unix timestamp (ms)
-}>
+// Stable storage: Verification results in SQLite (persisted)
+// Stored in user_states table as:
+// - packetVerifiedMuted: 0 | 1 | null
+// - packetVerifiedAt: ISO 8601 timestamp | null
 ```
 
 ### **Abstraction Function**
 
-AF(buffers, cache) = For each user:
-- Audio stream: sequence of Float32Array samples received in last 1000ms
-- Verification status: user is transmitting silence (muted) or audio (unmuted)
-- Freshness: timestamp of last received sample and last verification
+AF(buffers, database) = For each user:
+- Audio stream (transient): sequence of Float32Array samples received in last 1000ms
+- Verification status (persisted): user is transmitting silence (muted) or audio (unmuted)
+- Freshness (persisted): timestamp of last packet verification
+
+**Design rationale:** Audio samples are transient (in-memory) because they're processed immediately; verification results are persisted (database) to survive crashes.
 
 ### **Representation Invariant**
 
-- `userId`: non-empty string keys in both Maps
-- `samples`: array of Float32Array objects (each 4096 samples)
-- `lastUpdate`, `lastVerified`: positive integers (Unix epoch ms)
-- `isVerifiedMuted`: boolean computed from RMS energy < 0.01 threshold
+**In-memory (audio buffers):**
+- `userId`: non-empty string keys
+- `samples`: array of Float32Array objects (each ~4096 samples)
+- `lastUpdate`: positive integer (Unix epoch ms)
 - Sample buffer contains only data from last `VERIFICATION_WINDOW_MS` (1000ms)
+
+**Persisted (database):**
+- `packetVerifiedMuted` ∈ {0, 1, null} (boolean computed from RMS energy < 0.01 threshold)
+- `packetVerifiedAt`: valid ISO 8601 timestamp or null
+- If `packetVerifiedMuted` is non-null, then `packetVerifiedAt` must be non-null
+- `packetVerifiedAt` ≤ current time (no future timestamps)
 
 ### **Safety from Rep Exposure**
 
-- ✅ Maps are private to the module (not exported)
+- ✅ In-memory Map is private to the module (not exported)
 - ✅ WebSocket connections identified by userId (no connection object exposure)
-- ✅ Float32Array samples are consumed immediately for RMS calculation
-- ⚠️ Verification results returned as plain objects (safe, immutable)
+- ✅ Float32Array samples are consumed immediately for RMS calculation (not exposed)
+- ✅ Verification results read from database (immutable after retrieval)
+- ✅ Database handles persistence (no direct file system exposure)
 
 ---
 
@@ -153,6 +171,67 @@ AF(r) = An API operation result where:
 - ✅ Response objects are serialized to JSON (deep copy, no references)
 - ✅ All data types are primitives, plain objects, or arrays (no mutable ADTs)
 - ✅ UserState objects from database are already safe (see Module 1)
+
+---
+
+## 📦 **Stable Storage Summary**
+
+### **What's Persisted to SQLite (`audio-states.db`)**
+
+| Data | Storage | Survives Crashes | Rationale |
+|------|---------|------------------|-----------|
+| User identity (userId, username) | ✅ Database | ✅ Yes | Critical: cannot lose user identities |
+| Mute intent (isMuted) | ✅ Database | ✅ Yes | Critical: state must survive server restart |
+| Web Audio verification (verifiedMuted) | ✅ Database | ✅ Yes | Important: verification result from frontend |
+| Packet verification (packetVerifiedMuted) | ✅ Database | ✅ Yes | Important: verification result from backend |
+| Packet verification time (packetVerifiedAt) | ✅ Database | ✅ Yes | Important: freshness tracking for verification |
+| Device selection (deviceId, deviceLabel) | ✅ Database | ✅ Yes | Important: user device preference |
+| Room membership (roomId) | ✅ Database | ✅ Yes | Important: meeting context |
+| Timestamps (createdAt, lastUpdated) | ✅ Database | ✅ Yes | Important: audit trail |
+
+### **What's NOT Persisted (In-Memory Only)**
+
+| Data | Storage | Survives Crashes | Rationale |
+|------|---------|------------------|-----------|
+| Raw audio samples (Float32Array[]) | ❌ Memory | ❌ No | Transient: processed immediately, not needed after analysis |
+| WebSocket connections | ❌ Memory | ❌ No | Transient: clients reconnect after server restart |
+| Audio buffer timestamps | ❌ Memory | ❌ No | Transient: stale after 30 seconds anyway |
+| API responses | ❌ Memory | ❌ No | Transient: generated on-demand from database |
+
+### **Storage Architecture**
+
+```
+┌─────────────────────┐
+│   Frontend Client   │
+│   (Web Audio API)   │
+└──────────┬──────────┘
+           │ WebSocket (audio samples)
+           ▼
+┌─────────────────────┐     ┌──────────────────────┐
+│  packet-verifier.js │────▶│  In-Memory Buffers   │ (Transient)
+│  (RMS analysis)     │     │  Float32Array[]      │
+└──────────┬──────────┘     └──────────────────────┘
+           │ persist()
+           ▼
+┌─────────────────────┐     ┌──────────────────────┐
+│    database.js      │────▶│  SQLite Database     │ (Stable)
+│  (CRUD operations)  │     │  audio-states.db     │
+└─────────────────────┘     └──────────────────────┘
+                                      │
+                                      │ WAL mode
+                                      ▼
+                            ┌──────────────────────┐
+                            │  Disk Storage        │ (Persistent)
+                            │  .db, .wal, .shm     │
+                            └──────────────────────┘
+```
+
+### **Benefits of This Design**
+
+1. **Crash Resilience:** Critical state (mute, verification, device) survives server restarts
+2. **Memory Efficiency:** Only recent audio samples (1 second window) kept in memory
+3. **Performance:** Fast in-memory processing of audio; slower database only for results
+4. **Auditability:** All verification results and state changes persisted with timestamps
 
 ---
 

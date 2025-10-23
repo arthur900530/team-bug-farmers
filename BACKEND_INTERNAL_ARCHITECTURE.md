@@ -1079,19 +1079,22 @@ This dual-method approach provides defense-in-depth verification:
 - **Method 2** is continuous and backend-controlled, providing tamper-proof verification
 - Combined, they offer high-confidence mute verification
 
-**Two-Field State Model:**
+**Three-Field State Model:**
 ```javascript
 {
-  isMuted: boolean,              // User intent (button clicked)
-  verifiedMuted: boolean|null    // Combined verification result from both methods
+  isMuted: boolean,                   // User intent (button clicked)
+  verifiedMuted: boolean|null,        // Method 1 verification (Web Audio API)
+  packetVerifiedMuted: boolean|null   // Method 2 verification (Packet inspection)
 }
 ```
 
 **Data Flow:**
 ```
 Method 1: audioService → Web Audio API → verifiedMuted (database)
-Method 2: audioStreamService → WebSocket → packet-verifier.js → packetVerifiedMuted (memory cache)
+Method 2: audioStreamService → WebSocket → packet-verifier.js → packetVerifiedMuted (database)
 ```
+
+**Both verification results are now persisted to SQLite for crash resilience.**
 
 This separation allows the system to:
 1. Capture intent vs. reality (User Story 1 requirement)
@@ -1117,8 +1120,7 @@ graph TB
     
     subgraph "Backend Storage"
         Server["server.js<br/>━━━━━━━━━━<br/>/verify endpoint<br/>/packet-verification"]
-        DB[("SQLite<br/>━━━━━━━━━━<br/>user_states<br/>verifiedMuted")]
-        Cache["Memory Cache<br/>━━━━━━━━━━━━<br/>packetVerifiedMuted<br/>per user"]
+        DB[("SQLite Database<br/>━━━━━━━━━━━━━━━<br/>user_states table<br/><br/>verifiedMuted<br/>packetVerifiedMuted<br/>packetVerifiedAt")]
     end
     
     AudioService1 -->|"Read frequency data"| WebAudioAPI
@@ -1129,8 +1131,8 @@ graph TB
     
     AudioStreamService -->|"Continuous audio samples"| WebSocket
     WebSocket -->|"Float32Array"| PacketVerifier
-    PacketVerifier -->|"Store Method 2 result"| Cache
-    Server -->|"GET /packet-verification"| Cache
+    PacketVerifier -->|"Persist Method 2 result"| DB
+    Server -->|"GET /packet-verification"| DB
     
     style AudioService1 fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
     style WebAudioAPI fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
@@ -1140,7 +1142,6 @@ graph TB
     style PacketVerifier fill:#E1BEE7,stroke:#9C27B0,stroke-width:3px
     style Server fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
     style DB fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
-    style Cache fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ### **4.3 Design Justifications**

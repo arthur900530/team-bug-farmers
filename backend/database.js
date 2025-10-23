@@ -21,6 +21,8 @@ export function initDatabase() {
       username TEXT NOT NULL,
       isMuted INTEGER NOT NULL DEFAULT 0,
       verifiedMuted INTEGER DEFAULT NULL,
+      packetVerifiedMuted INTEGER DEFAULT NULL,
+      packetVerifiedAt TEXT DEFAULT NULL,
       deviceId TEXT,
       deviceLabel TEXT,
       roomId TEXT,
@@ -51,6 +53,21 @@ export function initDatabase() {
     // Column already exists or table is new
   }
   
+  // Add packet verification columns if they don't exist (for existing databases)
+  try {
+    db.exec(`ALTER TABLE user_states ADD COLUMN packetVerifiedMuted INTEGER DEFAULT NULL`);
+    console.log('✅ Added packetVerifiedMuted column to existing database');
+  } catch (error) {
+    // Column already exists or table is new
+  }
+  
+  try {
+    db.exec(`ALTER TABLE user_states ADD COLUMN packetVerifiedAt TEXT DEFAULT NULL`);
+    console.log('✅ Added packetVerifiedAt column to existing database');
+  } catch (error) {
+    // Column already exists or table is new
+  }
+  
   console.log('✅ Database initialized');
 }
 
@@ -64,6 +81,8 @@ export function getUserState(userId) {
       username,
       isMuted,
       verifiedMuted,
+      packetVerifiedMuted,
+      packetVerifiedAt,
       deviceId,
       deviceLabel,
       roomId,
@@ -82,6 +101,8 @@ export function getUserState(userId) {
     username: row.username,
     isMuted: Boolean(row.isMuted),
     verifiedMuted: row.verifiedMuted !== null ? Boolean(row.verifiedMuted) : null,
+    packetVerifiedMuted: row.packetVerifiedMuted !== null ? Boolean(row.packetVerifiedMuted) : null,
+    packetVerifiedAt: row.packetVerifiedAt,
     deviceId: row.deviceId,
     deviceLabel: row.deviceLabel,
     roomId: row.roomId,
@@ -100,6 +121,8 @@ export function getAllUserStates() {
       username,
       isMuted,
       verifiedMuted,
+      packetVerifiedMuted,
+      packetVerifiedAt,
       deviceId,
       deviceLabel,
       roomId,
@@ -116,6 +139,8 @@ export function getAllUserStates() {
     username: row.username,
     isMuted: Boolean(row.isMuted),
     verifiedMuted: row.verifiedMuted !== null ? Boolean(row.verifiedMuted) : null,
+    packetVerifiedMuted: row.packetVerifiedMuted !== null ? Boolean(row.packetVerifiedMuted) : null,
+    packetVerifiedAt: row.packetVerifiedAt,
     deviceId: row.deviceId,
     deviceLabel: row.deviceLabel,
     roomId: row.roomId,
@@ -127,16 +152,17 @@ export function getAllUserStates() {
 /**
  * Create or update user state
  */
-export function createOrUpdateUserState({ userId, username, isMuted, verifiedMuted, deviceId, deviceLabel, roomId }) {
+export function createOrUpdateUserState({ userId, username, isMuted, verifiedMuted, packetVerifiedMuted, packetVerifiedAt, deviceId, deviceLabel, roomId }) {
   const now = new Date().toISOString();
   
-  // Convert booleans to INTEGER, handle null for verifiedMuted
+  // Convert booleans to INTEGER, handle null for verified fields
   const isMutedInt = isMuted ? 1 : 0;
   const verifiedMutedInt = verifiedMuted === null || verifiedMuted === undefined ? null : (verifiedMuted ? 1 : 0);
+  const packetVerifiedMutedInt = packetVerifiedMuted === null || packetVerifiedMuted === undefined ? null : (packetVerifiedMuted ? 1 : 0);
   
   const stmt = db.prepare(`
-    INSERT INTO user_states (userId, username, isMuted, verifiedMuted, deviceId, deviceLabel, roomId, lastUpdated, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO user_states (userId, username, isMuted, verifiedMuted, packetVerifiedMuted, packetVerifiedAt, deviceId, deviceLabel, roomId, lastUpdated, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(userId) DO UPDATE SET
       username = excluded.username,
       isMuted = excluded.isMuted,
@@ -144,13 +170,21 @@ export function createOrUpdateUserState({ userId, username, isMuted, verifiedMut
         WHEN excluded.verifiedMuted IS NOT NULL THEN excluded.verifiedMuted
         ELSE user_states.verifiedMuted
       END,
+      packetVerifiedMuted = CASE 
+        WHEN excluded.packetVerifiedMuted IS NOT NULL THEN excluded.packetVerifiedMuted
+        ELSE user_states.packetVerifiedMuted
+      END,
+      packetVerifiedAt = CASE 
+        WHEN excluded.packetVerifiedAt IS NOT NULL THEN excluded.packetVerifiedAt
+        ELSE user_states.packetVerifiedAt
+      END,
       deviceId = excluded.deviceId,
       deviceLabel = excluded.deviceLabel,
       roomId = excluded.roomId,
       lastUpdated = excluded.lastUpdated
   `);
   
-  stmt.run(userId, username, isMutedInt, verifiedMutedInt, deviceId, deviceLabel, roomId, now, now);
+  stmt.run(userId, username, isMutedInt, verifiedMutedInt, packetVerifiedMutedInt, packetVerifiedAt, deviceId, deviceLabel, roomId, now, now);
   
   return getUserState(userId);
 }
@@ -174,6 +208,8 @@ export function getUsersByRoom(roomId) {
       username,
       isMuted,
       verifiedMuted,
+      packetVerifiedMuted,
+      packetVerifiedAt,
       deviceId,
       deviceLabel,
       roomId,
@@ -191,6 +227,8 @@ export function getUsersByRoom(roomId) {
     username: row.username,
     isMuted: Boolean(row.isMuted),
     verifiedMuted: row.verifiedMuted !== null ? Boolean(row.verifiedMuted) : null,
+    packetVerifiedMuted: row.packetVerifiedMuted !== null ? Boolean(row.packetVerifiedMuted) : null,
+    packetVerifiedAt: row.packetVerifiedAt,
     deviceId: row.deviceId,
     deviceLabel: row.deviceLabel,
     roomId: row.roomId,
