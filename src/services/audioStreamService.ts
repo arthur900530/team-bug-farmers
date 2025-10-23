@@ -223,8 +223,6 @@ class AudioStreamService {
   }
 }
 
-// Singleton instance
-const audioStreamService = new AudioStreamService();
-
-export default audioStreamService;
+// Singleton instance - exported for use throughout the application
+export const audioStreamService = new AudioStreamService();
 

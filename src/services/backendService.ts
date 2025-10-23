@@ -9,7 +9,9 @@ interface UserState {
   userId: string;
   username: string;
   isMuted: boolean;
-  verifiedMuted: boolean | null;  // User Story 1: Hardware verification result
+  verifiedMuted: boolean | null;  // User Story 1: Hardware verification (Method 1 - Web Audio API)
+  packetVerifiedMuted: boolean | null;  // User Story 1: Packet verification (Method 2 - Backend)
+  packetVerifiedAt: string | null;  // Timestamp of last packet verification
   deviceId: string | null;
   deviceLabel: string | null;
   roomId: string | null;

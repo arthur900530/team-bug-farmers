@@ -725,6 +725,8 @@ All functions are **skeleton implementations** that log to console:
   username: string;
   isMuted: boolean;
   verifiedMuted: boolean | null;
+  packetVerifiedMuted: boolean | null;
+  packetVerifiedAt: string | null;
   deviceId: string | null;
   deviceLabel: string | null;
   roomId: string | null;
@@ -734,9 +736,7 @@ All functions are **skeleton implementations** that log to console:
 ```
 
 **Visibility:** 🔒 Private (not exported, used internally)  
-**Purpose:** Type definition for user state objects returned from backend
-
-**Note:** Missing `packetVerifiedMuted` and `packetVerifiedAt` fields - needs update to match v1.3.0 schema.
+**Purpose:** Type definition for user state objects returned from backend (v1.3.0 schema with dual verification support)
 
 ---
 
@@ -1378,10 +1378,10 @@ audioService.mute();
 #### **2.3.4 Exported Singleton Instance**
 
 ```typescript
-🌐 export default audioStreamService;
+🌐 export const audioStreamService = new AudioStreamService();
 ```
 
-**Visibility:** 🌐 **Externally Visible** (default export)  
+**Visibility:** 🌐 **Externally Visible** (named export)  
 **Type:** `AudioStreamService` instance  
 **Usage:** Import and use directly (singleton pattern)
 
@@ -1391,7 +1391,7 @@ await audioStreamService.connect('user-123');
 audioStreamService.startStreaming(stream);
 ```
 
-**Implementation Reference:** [`src/services/audioStreamService.ts:229`](src/services/audioStreamService.ts)
+**Implementation Reference:** [`src/services/audioStreamService.ts:227`](src/services/audioStreamService.ts)
 
 ---
 
@@ -1507,55 +1507,9 @@ backendService.ts → (No internal dependencies)
 
 ---
 
-## 5. Known Issues & Discrepancies
+## 5. Architecture Patterns Observed
 
-### **5.1 Type Definition Mismatch**
-
-**Issue:** `src/services/backendService.ts` `UserState` interface is missing fields from v1.3.0 schema.
-
-**Current:**
-```typescript
-interface UserState {
-  // ... other fields
-  verifiedMuted: boolean | null;
-  // Missing: packetVerifiedMuted, packetVerifiedAt
-}
-```
-
-**Expected (v1.3.0):**
-```typescript
-interface UserState {
-  // ... other fields
-  verifiedMuted: boolean | null;
-  packetVerifiedMuted: boolean | null;  // ← Missing
-  packetVerifiedAt: string | null;      // ← Missing
-}
-```
-
-**Impact:** TypeScript compiler may not catch errors when accessing these fields.
-
-**Recommendation:** Update `UserState` interface to include all v1.3.0 fields.
-
----
-
-### **5.2 Module Export Inconsistency**
-
-**Issue:** `audioStreamService.ts` uses default export, while `audioService.ts` uses named export for singleton.
-
-**Recommendation:** Standardize to named exports for consistency:
-```typescript
-// Preferred:
-export const audioStreamService = new AudioStreamService();
-
-// Instead of:
-export default audioStreamService;
-```
-
----
-
-## 6. Architecture Patterns Observed
-
-### **6.1 Backend Patterns**
+### **5.1 Backend Patterns**
 
 1. **Functional Module Pattern** (`database.js`, `metrics.js`)
    - Export pure functions
@@ -1574,7 +1528,7 @@ export default audioStreamService;
 
 ---
 
-### **6.2 Frontend Patterns**
+### **5.2 Frontend Patterns**
 
 1. **Singleton Pattern** (`audioService.ts`, `audioStreamService.ts`)
    - Single instance per application
@@ -1593,9 +1547,9 @@ export default audioStreamService;
 
 ---
 
-## 7. References
+## 6. References
 
-### **Implementation Files**
+### **6.1 Implementation Files**
 
 - [`backend/server.js`](backend/server.js) - Express server and routes
 - [`backend/database.js`](backend/database.js) - SQLite DAO
@@ -1606,7 +1560,7 @@ export default audioStreamService;
 - [`src/services/audioService.ts`](src/services/audioService.ts) - Microphone control
 - [`src/services/audioStreamService.ts`](src/services/audioStreamService.ts) - WebSocket client
 
-### **Related Documentation**
+### **6.2 Related Documentation**
 
 - [`API_SPECIFICATION.md`](API_SPECIFICATION.md) - API contracts
 - [`BACKEND_INTERNAL_ARCHITECTURE.md`](BACKEND_INTERNAL_ARCHITECTURE.md) - Architecture details
