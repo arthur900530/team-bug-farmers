@@ -125,7 +125,7 @@ graph TB
 
 **Choice:** Three endpoints: `/state`, `/mute`, `/device`
 
-**Rationale:**
+**Rationale:** Separate endpoints are necessary to preserve state across partial updates, which is critical for User Story 2 (device switching without disconnection).
 
 **User Story Requirement:**
 - User Story 2 states: "Switch devices **without disconnecting**"
@@ -335,7 +335,7 @@ export function getUserStateAndNotify(userId) {
 
 **Choice:** Single function for INSERT and UPDATE
 
-**Rationale:**
+**Rationale:** Using SQLite's upsert (INSERT...ON CONFLICT) provides atomicity and idempotency in a single operation.
 
 **SQL:**
 ```sql
@@ -374,7 +374,7 @@ if (userExists(userId)) {
 
 **Choice:** Enable Write-Ahead Logging on startup
 
-**Rationale:**
+**Rationale:** WAL mode dramatically improves concurrency by allowing readers and writers to work simultaneously without blocking.
 
 **Command:**
 ```javascript
@@ -410,7 +410,7 @@ Readers read from last checkpoint, not blocked
 
 **Choice:** Convert SQLite INTEGER ↔ JavaScript boolean
 
-**Rationale:**
+**Rationale:** Type conversion ensures JavaScript code can use native booleans instead of confusing integer flags (0/1).
 
 **Problem:**
 - SQLite has no boolean type, uses INTEGER (0 = false, 1 = true)
@@ -444,7 +444,7 @@ const isMutedBool = Boolean(row.isMuted);
 
 **Choice:** All queries use `db.prepare()` with parameters
 
-**Rationale:**
+**Rationale:** Prepared statements provide both security (SQL injection prevention) and performance (query plan reuse).
 
 **Example:**
 ```javascript
@@ -483,7 +483,7 @@ Every call: Parse + Execute = 0.5ms
 
 **Choice:** Two indexes in schema
 
-**Rationale:**
+**Rationale:** Indexes optimize our most common query patterns (room lookups and recent activity sorting), trading write speed for read speed.
 
 **Query Patterns:**
 ```javascript
@@ -528,7 +528,7 @@ With idx_lastUpdated: O(log n) index scan (already sorted)
 
 **Choice:** Single connection for application lifetime
 
-**Rationale:**
+**Rationale:** SQLite's single-writer design means connection pooling provides no performance benefit and only adds complexity.
 
 **SQLite Architecture:**
 - Single writer at a time (lock-based)
@@ -610,7 +610,7 @@ graph LR
 
 **Choice:** Abstract Fetch API behind typed functions
 
-**Rationale:**
+**Rationale:** The Facade pattern hides HTTP complexity behind simple function calls, improving type safety and maintainability.
 
 **Without Facade (Rejected):**
 ```typescript
@@ -648,7 +648,7 @@ if (userState) { ... }
 
 **Choice:** Never throw exceptions, return `null` on any error
 
-**Rationale:**
+**Rationale:** Returning null instead of throwing enables graceful degradation—the frontend continues working even when the backend fails.
 
 **Implementation:**
 ```typescript
@@ -721,7 +721,7 @@ try {
 
 **Choice:** Three functions: `updateUserState()`, `updateMuteStatus()`, `updateDevice()`
 
-**Rationale:**
+**Rationale:** Each function maps 1:1 with a backend endpoint, providing semantic clarity and preventing accidental state overwrites.
 
 **Aligns with Backend Endpoints:**
 ```typescript
@@ -768,7 +768,7 @@ updateUser(userId, {deviceId: '...'});
 
 **Choice:** `API_BASE_URL` from `import.meta.env.VITE_API_URL`
 
-**Rationale:**
+**Rationale:** Environment variables enable the same build to work across different environments (dev, staging, production) without code changes.
 
 **Configuration:**
 ```typescript
@@ -809,7 +809,7 @@ const API_BASE_URL = 'http://localhost:3001/api';  // Bad
 
 **Choice:** `console.log` and `console.error` for debugging
 
-**Rationale:**
+**Rationale:** Console logging provides sufficient observability at our scale (10 users) without adding external dependencies.
 
 **Current Implementation:**
 ```typescript
@@ -841,7 +841,7 @@ logger.error('API call failed', {error, context});
 
 **Choice:** Define `UserState` and `ApiResponse<T>` interfaces
 
-**Rationale:**
+**Rationale:** TypeScript interfaces provide compile-time safety, preventing runtime errors from typos or type mismatches.
 
 **Interfaces:**
 ```typescript
@@ -897,7 +897,7 @@ if (user.isMuuted) {  // Typo! Runtime error
 
 **Choice:** Fire-and-forget, no queuing or automatic retry
 
-**Rationale:**
+**Rationale:** Request queueing and retry logic add significant complexity with minimal benefit at our scale (10 users with stable networks).
 
 **Current Behavior:**
 ```typescript
