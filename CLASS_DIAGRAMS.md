@@ -28,6 +28,25 @@ This document provides detailed **Mermaid class diagrams** showing the internal 
 
 ---
 
+## 🎨 **Diagram Color Legend**
+
+All diagrams in this document follow a consistent color scheme for easy identification:
+
+| Color | Hex Code | Usage | Examples |
+|-------|----------|-------|----------|
+| 🟢 **Green** | `fill:#E8F5E9, stroke:#4CAF50` | **Frontend classes/services** | AudioService, AudioStreamService, Frontend modules |
+| 🟣 **Purple** | `fill:#E1BEE7, stroke:#9C27B0` | **Backend classes** | AudioPacketVerifier |
+| 🟡 **Yellow** | `fill:#FFF9C4, stroke:#FBC02D` | **Database/DAO modules** | database.js, backendService.ts |
+| 🟠 **Orange** | `fill:#FFE0B2/#FFF3E0, stroke:#FF9800` | **WebSocket/Storage/API** | SQLite, WebSocket servers, Backend API |
+| 🔵 **Blue** | `fill:#E3F2FD, stroke:#2196F3` | **Web APIs** | AudioContext, AnalyserNode, MediaStream |
+| 🔴 **Red** | `fill:#FFEBEE, stroke:#E53935` | **Critical operations** | Upsert operations, Final states, Verification updates |
+
+**Stroke Width Convention:**
+- `stroke-width:3px` - Primary/main classes being documented
+- `stroke-width:2px` - Supporting classes, dependencies, utilities
+
+---
+
 ## 1. Backend Classes
 
 ### **1.1 Class: `AudioPacketVerifier` (backend/packet-verifier.js)**
@@ -65,9 +84,18 @@ classDiagram
         +string~null packetVerifiedAt
     }
     
+    class Database {
+        <<module>>
+    }
+    
     AudioPacketVerifier --> BufferData : stores
     AudioPacketVerifier --> VerificationResult : returns
     AudioPacketVerifier --> Database : persists to
+    
+    style AudioPacketVerifier fill:#E1BEE7,stroke:#9C27B0,stroke-width:3px
+    style BufferData fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style VerificationResult fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    style Database fill:#FFF9C4,stroke:#FBC02D,stroke-width:2px
     
     note for AudioPacketVerifier "Private class instantiated by\ninitializePacketVerifier(httpServer)\nFactory Pattern"
     
@@ -326,6 +354,11 @@ classDiagram
     AudioService --> AudioContext : uses
     AudioService --> MediaStream : manages
     AudioService --> AnalyserNode : analyzes with
+    
+    style AudioService fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    style AudioContext fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style MediaStream fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style AnalyserNode fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
     
     note for AudioService "Singleton Pattern\nexport const audioService = new AudioService()"
     
@@ -694,6 +727,11 @@ classDiagram
     AudioStreamService --> WebSocket : manages
     AudioStreamService --> ScriptProcessorNode : uses
     AudioStreamService ..> BackendPacketVerifier : streams to
+    
+    style AudioStreamService fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    style WebSocket fill:#FFE0B2,stroke:#FF9800,stroke-width:2px
+    style ScriptProcessorNode fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    style BackendPacketVerifier fill:#E1BEE7,stroke:#9C27B0,stroke-width:2px
     
     note for AudioStreamService "Singleton Pattern\nexport const audioStreamService = new AudioStreamService()"
     
