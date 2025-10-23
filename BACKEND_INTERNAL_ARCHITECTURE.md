@@ -682,7 +682,7 @@ if (userState) { ... }
 
 **Choice:** Never throw exceptions, return `null` on any error
 
-**Rationale:** Returning null instead of throwing enables graceful degradation—the frontend continues working even when the backend fails.
+**Rationale:** Returning null enables the frontend to continue functioning when backend sync fails, prioritizing immediate user feedback over guaranteed consistency.
 
 **Implementation:**
 ```typescript
@@ -692,12 +692,12 @@ async function updateMuteStatus(userId: string, isMuted: boolean): Promise<UserS
     const result = await response.json();
     if (!response.ok || !result.success) {
       console.error('Failed:', result.error);
-      return null;  // ← Return null, don't throw
+      return null;
     }
     return result.data;
   } catch (error) {
     console.error('Error:', error);
-    return null;  // ← Catch all errors, return null
+    return null;
   }
 }
 ```
@@ -705,26 +705,23 @@ async function updateMuteStatus(userId: string, isMuted: boolean): Promise<UserS
 **Usage in Component:**
 ```typescript
 const handleMute = async () => {
-  // Control hardware FIRST (instant feedback)
+  // Hardware muted FIRST (instant feedback)
   audioService.mute();
   setMicMuted(true);
   
-  // Sync to backend (fire-and-forget)
+  // Backend sync (async)
   const result = await updateMuteStatus(userId, true);
   if (!result) {
-    // Backend failed, but hardware is still muted
-    console.warn('Backend sync failed, continuing anyway');
+    console.warn('Backend sync failed - state diverged');
+    // TODO: Implement reconnection reconciliation
   }
-  
-  // UI already updated, user sees muted state
 };
 ```
 
 **Benefits:**
-1. **Resilience:** Frontend works even if backend is down
-2. **UX:** User sees immediate feedback (hardware muted), backend sync is background
-3. **Simplicity:** No try/catch in every component
-4. **Graceful Degradation:** App continues working offline
+1. **Immediate UX:** Hardware control doesn't wait for network
+2. **Simplicity:** No try/catch in every component
+3. **Partial Success:** User sees correct local state even if sync fails
 
 **Alternative Considered:** Throw exceptions
 ```typescript
@@ -745,9 +742,8 @@ try {
 ```
 
 **Why Rejected:**
-- Forces components to handle errors they can't recover from
-- Complicates component logic
-- Breaks fire-and-forget pattern
+- Forces error handling for unrecoverable scenarios (hardware already changed)
+- Can't rollback hardware state, so throwing serves no purpose
 
 ---
 
@@ -929,7 +925,7 @@ if (user.isMuuted) {  // Typo! Runtime error
 
 #### **Decision 7: Why No Request Queue or Retry?**
 
-**Choice:** Fire-and-forget, no queuing or automatic retry
+**Choice:** Best-effort delivery without retry or queue
 
 **Rationale:** Request queueing and retry logic add significant complexity with minimal benefit at our scale (10 users with stable networks).
 
