@@ -46,6 +46,7 @@ The server follows a classic 3-tier architecture with clear separation between t
 2. **Application Layer (Route Handlers)**
    - Input validation (inline, no separate controllers)
    - Business logic coordination
+   - Database calls via database.js
    - Error handling
    - Response formatting
    - **Note:** Routes directly call `database.js` functions - no controller layer
@@ -159,7 +160,7 @@ PATCH /api/users/:userId/device
 POST /api/users/:userId/state
   → Updates ALL fields
   → Problem: Frontend must send complete state every time
-  → Risk: Race condition if two updates overlap
+  → Risk: If frontend has stale state (e.g., from network lag), it could overwrite recent changes
 ```
 
 **Benefits of Granular Endpoints:**
