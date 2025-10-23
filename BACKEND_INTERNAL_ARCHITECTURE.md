@@ -398,7 +398,7 @@ if (userExists(userId)) {
 
 **Choice:** Enable Write-Ahead Logging on startup
 
-**Rationale:** WAL mode provides better write performance and crash recovery, and enables concurrent readers (though limited benefit with synchronous operations).
+**Rationale:** WAL mode provides better write performance and crash recovery, and enables concurrent readers (though limited benefit with synchronous operations as they block the event loop).
 
 **Command:**
 ```javascript
@@ -408,8 +408,7 @@ db.pragma('journal_mode = WAL');
 **Benefits:**
 1. **Write Performance:** ~30% faster writes (reduced fsync overhead)
 2. **Crash Recovery:** Better durability than DELETE mode
-3. **Read Concurrency:** Readers don't block writers (limited benefit with sync operations, see note below)
-4. **Best Practice:** SQLite recommended mode for server applications
+3. **Best Practice:** SQLite recommended mode for server applications
 
 **How WAL Works:**
 ```
@@ -581,7 +580,7 @@ Connection pool (5 connections):
 - File descriptors: 5
 - Complexity: High (pool lifecycle, connection leaks, retry logic)
 - Max throughput: Still ~100-200 req/s (SQLite single-writer bottleneck unchanged)
-- Benefit: NONE for SQLite + synchronous operations
+- Benefit: Minimal at 10 users (long running queries can block short ones)
 ```
 
 **Alternative Considered:** generic-pool with 5 connections
