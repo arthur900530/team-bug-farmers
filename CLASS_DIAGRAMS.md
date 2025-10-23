@@ -206,7 +206,7 @@ RMS = √(Σ(sample²) / N)
 ##### **`getVerificationResult(userId)`**
 
 ```javascript
-+getVerificationResult(userId: string): {packetVerifiedMuted: boolean | null, packetVerifiedAt: string | null} | null
++getVerificationResult(userId: string): {clientReportedVerified: boolean | null, verifiedMuted: boolean | null, verifiedAt: string | null} | null
 ```
 
 | Property | Value |
@@ -221,8 +221,9 @@ RMS = √(Σ(sample²) / N)
 **Return Type:**
 ```typescript
 {
-  packetVerifiedMuted: boolean | null,
-  packetVerifiedAt: string | null  // ISO 8601 timestamp
+  clientReportedVerified: boolean | null,  // Method 1: Web Audio API (untrusted)
+  verifiedMuted: boolean | null,           // Method 2: Stream analysis (trusted)
+  verifiedAt: string | null                // ISO 8601 timestamp
 } | null
 ```
 
