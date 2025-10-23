@@ -68,95 +68,19 @@ HTTP Request → Middleware Chain → Route Handler → Database Layer → Respo
 
 ```mermaid
 graph TB
-    subgraph "Express Application"
-        subgraph "Middleware Stack (Executed in Order)"
-            MW1[CORS Middleware]
-            MW2[JSON Body Parser]
-            MW3[Request Logging Middleware]
-            MW4[Metrics Collection Middleware]
-            
-            MW1 --> MW2
-            MW2 --> MW3
-            MW3 --> MW4
-        end
-        
-        subgraph "Router Layer"
-            Router[Express Router]
-            
-            subgraph "Health & Metrics Routes"
-                RH1[GET /api/health]
-                RM1[GET /api/metrics]
-            end
-            
-            subgraph "User State Routes (User Story 1 & 2)"
-                RU1[POST /api/users/:userId/state]
-                RU2[PATCH /api/users/:userId/mute]
-                RU3[PATCH /api/users/:userId/device]
-                RU4[GET /api/users/:userId]
-                RU5[GET /api/users]
-                RU6[DELETE /api/users/:userId]
-            end
-            
-            subgraph "Room Routes"
-                RR1[GET /api/rooms/:roomId/users]
-            end
-            
-            MW4 --> Router
-            Router --> RH1
-            Router --> RM1
-            Router --> RU1
-            Router --> RU2
-            Router --> RU3
-            Router --> RU4
-            Router --> RU5
-            Router --> RU6
-            Router --> RR1
-        end
-        
-        subgraph "Route Handler Internals (Example: PATCH /mute)"
-            VLD[Input Validator]
-            BL[Business Logic]
-            DBCall[Database Call]
-            RespFormat[Response Formatter]
-            ErrHandle[Error Handler]
-            
-            VLD --> BL
-            BL --> DBCall
-            DBCall --> RespFormat
-            DBCall -.Error.-> ErrHandle
-            BL -.Error.-> ErrHandle
-        end
-        
-        subgraph "Database Abstraction Layer"
-            DB[(database.js Module)]
-            
-            DB --> |getUserState| DBOps1[Read Operation]
-            DB --> |createOrUpdateUserState| DBOps2[Upsert Operation]
-            DB --> |getAllUserStates| DBOps3[List Operation]
-            DB --> |deleteUserState| DBOps4[Delete Operation]
-        end
-        
-        subgraph "Shutdown Handler"
-            SH[Graceful Shutdown]
-            SH --> |SIGTERM/SIGINT| CloseServer[Close HTTP Server]
-            CloseServer --> CloseDB[Close Database]
-            CloseDB --> Exit[Process Exit]
-        end
-    end
+    Frontend["Frontend (React)<br/>━━━━━━━━━━━━━━━<br/>• audioService<br/>• backendService"] 
     
-    Client[HTTP Client] --> MW1
-    RespFormat --> Client
-    ErrHandle --> Client
+    Backend["Backend API (Express)<br/>━━━━━━━━━━━━━━━━━━━<br/>• Middleware (CORS, Logging)<br/>• Routes (User Story 1 & 2)<br/>• Controllers (Validation)<br/>• database.js module"]
     
-    RU2 --> VLD
-    DBCall --> DB
+    DB[("SQLite Database<br/>━━━━━━━━━━━━━<br/>audio-states.db<br/><br/>user_states table")]
     
-    style MW3 fill:#90EE90
-    style MW4 fill:#90EE90
-    style RU2 fill:#FFD700
-    style RU3 fill:#FFD700
-    style DB fill:#87CEEB
-    style SH fill:#FFA07A
+    Frontend -->|"HTTP/REST<br/><br/>PATCH /mute<br/>PATCH /device<br/>POST /state"| Backend
+    Backend -->|"JSON Response<br/>{success, data}"| Frontend
+    Backend -->|"SQL Operations<br/><br/>Upsert, Read<br/>Delete"| DB
+    
+    style Frontend fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    style Backend fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
+    style DB fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
 ```
 
 ---
@@ -355,96 +279,19 @@ The database module implements a classic DAO pattern, providing a clean abstract
 
 ```mermaid
 graph TB
-    subgraph "database.js Module"
-        subgraph "Module Initialization (On Import)"
-            Init1[Import better-sqlite3]
-            Init2[Create Database Connection]
-            Init3[Enable WAL Mode]
-            Init4[Call initDatabase]
-            
-            Init1 --> Init2
-            Init2 --> Init3
-            Init3 --> Init4
-        end
-        
-        subgraph "Schema Management"
-            InitDB[initDatabase Function]
-            CreateTable[CREATE TABLE IF NOT EXISTS]
-            CreateIndex1[CREATE INDEX idx_roomId]
-            CreateIndex2[CREATE INDEX idx_lastUpdated]
-            
-            InitDB --> CreateTable
-            CreateTable --> CreateIndex1
-            CreateIndex1 --> CreateIndex2
-        end
-        
-        subgraph "CRUD Operations"
-            subgraph "Read Operations"
-                GetOne[getUserState<br/>userId → UserState | null]
-                GetAll[getAllUserStates<br/>→ UserState array]
-                GetRoom[getUsersByRoom<br/>roomId → UserState array]
-                
-                GetOne --> PrepStmt1[Prepared Statement<br/>SELECT WHERE userId = ?]
-                GetAll --> PrepStmt2[Prepared Statement<br/>SELECT ORDER BY lastUpdated]
-                GetRoom --> PrepStmt3[Prepared Statement<br/>SELECT WHERE roomId = ?]
-                
-                PrepStmt1 --> Convert1[Boolean Conversion<br/>INTEGER → boolean]
-                PrepStmt2 --> Convert2[Boolean Conversion<br/>Array map]
-                PrepStmt3 --> Convert3[Boolean Conversion<br/>Array map]
-            end
-            
-            subgraph "Write Operations"
-                Upsert[createOrUpdateUserState<br/>data → UserState]
-                Delete[deleteUserState<br/>userId → boolean]
-                
-                Upsert --> Convert4[Boolean Conversion<br/>boolean → INTEGER]
-                Convert4 --> Timestamp[Generate Timestamps<br/>ISO 8601]
-                Timestamp --> PrepStmt4[Prepared Statement<br/>INSERT ON CONFLICT UPDATE]
-                PrepStmt4 --> ReturnState[Return Updated State]
-                
-                Delete --> PrepStmt5[Prepared Statement<br/>DELETE WHERE userId = ?]
-                PrepStmt5 --> CheckChanges[Check stmt.changes]
-            end
-            
-            subgraph "Utility Operations"
-                Cleanup[cleanupOldEntries<br/>daysOld → count]
-                
-                Cleanup --> CalcDate[Calculate Cutoff Date]
-                CalcDate --> PrepStmt6[Prepared Statement<br/>DELETE WHERE lastUpdated < ?]
-            end
-        end
-        
-        subgraph "Shutdown Handler"
-            SigInt[process.on 'SIGINT']
-            CloseDB[db.close]
-            LogClose[console.log 'DB closed']
-            ProcessExit[process.exit 0]
-            
-            SigInt --> CloseDB
-            CloseDB --> LogClose
-            LogClose --> ProcessExit
-        end
-        
-        subgraph "SQLite Connection (Singleton)"
-            DBConn[(SQLite Connection<br/>audio-states.db<br/>WAL Mode)]
-            
-            PrepStmt1 -.-> DBConn
-            PrepStmt2 -.-> DBConn
-            PrepStmt3 -.-> DBConn
-            PrepStmt4 -.-> DBConn
-            PrepStmt5 -.-> DBConn
-            PrepStmt6 -.-> DBConn
-        end
-    end
+    Server["server.js<br/>━━━━━━━━━━<br/>Route Handlers"]
     
-    Server[server.js] --> GetOne
-    Server --> Upsert
-    Server --> GetAll
+    DB["database.js Module<br/>━━━━━━━━━━━━━━━━━━━<br/>• DAO Pattern<br/>• Prepared Statements<br/>• Type Conversion<br/>• CRUD Operations"]
     
-    style InitDB fill:#90EE90
-    style Upsert fill:#FFD700
-    style DBConn fill:#87CEEB
-    style SigInt fill:#FFA07A
+    SQLite[("SQLite Database<br/>━━━━━━━━━━━━━<br/>audio-states.db<br/><br/>WAL Mode<br/>Indexed")]
+    
+    Server -->|"Read/Write/Delete<br/><br/>getUserState()<br/>createOrUpdateUserState()<br/>deleteUserState()"| DB
+    DB -->|"SQL Queries<br/><br/>Prepared statements<br/>Safe from injection"| SQLite
+    DB -.->|"Module Init<br/>Creates schema<br/>Enables WAL"| SQLite
+    
+    style Server fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
+    style DB fill:#FFF9C4,stroke:#FBC02D,stroke-width:3px
+    style SQLite fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
 ```
 
 ---
@@ -733,132 +580,24 @@ The frontend service provides a clean facade over the Fetch API, handling reques
 ### **3.2 Internal Architecture Diagram**
 
 ```mermaid
-graph TB
-    subgraph "backendService.ts Module"
-        subgraph "Configuration"
-            EnvVar[import.meta.env.VITE_API_URL]
-            Default['http://localhost:3001/api']
-            APIBase[API_BASE_URL Constant]
-            
-            EnvVar -.Fallback.-> Default
-            EnvVar --> APIBase
-            Default -.-> APIBase
-        end
-        
-        subgraph "TypeScript Interfaces"
-            IUserState[UserState Interface<br/>userId, isMuted, deviceId, ...]
-            IApiResponse[ApiResponse Generic<br/>success, data?, error?]
-        end
-        
-        subgraph "API Functions"
-            subgraph "User Story 1: Mute"
-                F1[updateMuteStatus<br/>userId, isMuted]
-                
-                F1 --> Build1[Build Request<br/>PATCH /users/:userId/mute<br/>Body: JSON]
-                Build1 --> Fetch1[fetch API Call]
-                Fetch1 --> Parse1[Parse JSON Response]
-                Parse1 --> Extract1[Extract data Field]
-                Extract1 --> Return1[Return UserState | null]
-                
-                Fetch1 -.Error.-> Catch1[Catch Block]
-                Catch1 --> Log1[console.error]
-                Log1 --> ReturnNull1[Return null]
-            end
-            
-            subgraph "User Story 2: Device"
-                F2[updateDevice<br/>userId, deviceId, label]
-                
-                F2 --> Build2[Build Request<br/>PATCH /users/:userId/device<br/>Body: JSON]
-                Build2 --> Fetch2[fetch API Call]
-                Fetch2 --> Parse2[Parse JSON Response]
-                Parse2 --> Extract2[Extract data Field]
-                Extract2 --> Return2[Return UserState | null]
-                
-                Fetch2 -.Error.-> Catch2[Catch Block]
-                Catch2 --> Log2[console.error]
-                Log2 --> ReturnNull2[Return null]
-            end
-            
-            subgraph "Complete State"
-                F3[updateUserState<br/>userId, isMuted, deviceId, ...]
-                
-                F3 --> Build3[Build Request<br/>POST /users/:userId/state<br/>Body: JSON]
-                Build3 --> Fetch3[fetch API Call]
-                Fetch3 --> Parse3[Parse JSON Response]
-                Parse3 --> Extract3[Extract data Field]
-                Extract3 --> Return3[Return UserState | null]
-            end
-            
-            subgraph "Read Operations"
-                F4[getUserState<br/>userId]
-                F5[getRoomUsers<br/>roomId]
-                F6[checkBackendHealth]
-                
-                F4 --> FetchGet1[GET /users/:userId]
-                F5 --> FetchGet2[GET /rooms/:roomId/users]
-                F6 --> FetchGet3[GET /health]
-                
-                FetchGet3 --> ReturnBool[Return boolean]
-            end
-            
-            subgraph "Delete Operation"
-                F7[deleteUserState<br/>userId]
-                
-                F7 --> FetchDel[DELETE /users/:userId]
-                FetchDel --> ReturnDelBool[Return boolean]
-            end
-        end
-        
-        subgraph "Request Template"
-            Template[Common Pattern for All Functions]
-            
-            T1[1. Construct URL<br/>Template string interpolation]
-            T2[2. Build Fetch Options<br/>method, headers, body]
-            T3[3. Call fetch<br/>await fetch url, options]
-            T4[4. Parse Response<br/>await response.json]
-            T5[5. Check Success<br/>response.ok && result.success]
-            T6[6. Return Data<br/>result.data || null]
-            T7[7. Error Handler<br/>try/catch → console.error → null]
-            
-            Template --> T1
-            T1 --> T2
-            T2 --> T3
-            T3 --> T4
-            T4 --> T5
-            T5 --> T6
-            T3 -.Throws.-> T7
-            T4 -.Throws.-> T7
-        end
-    end
+graph LR
+    App["App.tsx<br/>━━━━━━━━━━<br/>React Component<br/><br/>User Actions"]
     
-    subgraph "Frontend Components (Consumers)"
-        AppTSX[App.tsx]
-        CompMute[Mute Button Handler]
-        CompDevice[Device Dropdown Handler]
-        
-        CompMute --> F1
-        CompDevice --> F2
-        AppTSX --> F3
-        AppTSX --> F6
-    end
+    Service["backendService.ts<br/>━━━━━━━━━━━━━━━━━━━<br/>• Facade Pattern<br/>• updateMuteStatus()<br/>• updateDevice()<br/>• updateUserState()<br/>• Error Handling<br/>• TypeScript Types"]
     
-    subgraph "Backend Server"
-        Backend[Express Server<br/>Port 3001]
-        
-        Fetch1 --> Backend
-        Fetch2 --> Backend
-        Fetch3 --> Backend
-        FetchGet1 --> Backend
-        FetchGet2 --> Backend
-        FetchGet3 --> Backend
-        FetchDel --> Backend
-    end
+    Backend["Backend API<br/>━━━━━━━━━━━━━<br/>Express Server<br/><br/>localhost:3001"]
     
-    style F1 fill:#FFD700
-    style F2 fill:#FFD700
-    style F3 fill:#90EE90
-    style F6 fill:#87CEEB
-    style Template fill:#FFA07A
+    App -->|"Function Calls<br/><br/>User Story 1: Mute<br/>User Story 2: Device"| Service
+    Service -->|"Fetch API<br/><br/>HTTP/REST<br/>JSON payloads"| Backend
+    Backend -->|"JSON Response<br/><br/>{success, data}<br/>or null on error"| Service
+    Service -->|"Return Data<br/><br/>UserState | null"| App
+    
+    Config["Configuration<br/>━━━━━━━━━━━━━<br/>VITE_API_URL"] -.->|"Base URL"| Service
+    
+    style App fill:#E8F5E9,stroke:#4CAF50,stroke-width:3px
+    style Service fill:#FFF9C4,stroke:#FBC02D,stroke-width:3px
+    style Backend fill:#E3F2FD,stroke:#2196F3,stroke-width:3px
+    style Config fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ---
