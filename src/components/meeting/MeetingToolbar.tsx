@@ -75,7 +75,7 @@ export function MeetingToolbar({
                 <Mic className="w-6 h-6 text-white" />
               )}
               {micLocked && (
-                <Lock className="w-4 h-4 text-white absolute -top-1 -right-1 bg-gray-700 rounded-full p-1" />
+                <Lock className="w-4 h-4 text-white absolute -top-1 -right-1 bg-gray-700 rounded-full p-1" data-testid="mic-lock-icon" />
               )}
             </button>
             <button

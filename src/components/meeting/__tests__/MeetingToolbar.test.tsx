@@ -21,31 +21,31 @@ describe('MeetingToolbar', () => {
 
   describe('Lock Icon', () => {
     it('should display lock icon when micLocked is true', () => {
-      const { container } = render(
+      render(
         <MeetingToolbar {...defaultProps} micLocked={true} />
       );
 
-      // Find the lock icon by searching for the Lock lucide icon class
-      const lockIcon = container.querySelector('.lucide-lock');
+      // Find the lock icon by its test id
+      const lockIcon = screen.getByTestId('mic-lock-icon');
       expect(lockIcon).toBeInTheDocument();
     });
 
     it('should not display lock icon when micLocked is false', () => {
-      const { container } = render(
+      render(
         <MeetingToolbar {...defaultProps} micLocked={false} />
       );
 
       // Lock icon should not be present
-      const lockIcon = container.querySelector('.lucide-lock');
+      const lockIcon = screen.queryByTestId('mic-lock-icon');
       expect(lockIcon).not.toBeInTheDocument();
     });
 
     it('should display lock icon on microphone button when muted and locked', () => {
-      const { container } = render(
+      render(
         <MeetingToolbar {...defaultProps} micMuted={true} micLocked={true} />
       );
 
-      const lockIcon = container.querySelector('.lucide-lock');
+      const lockIcon = screen.getByTestId('mic-lock-icon');
       expect(lockIcon).toBeInTheDocument();
       
       // Verify it's positioned on the mic button (has absolute positioning)
@@ -53,11 +53,11 @@ describe('MeetingToolbar', () => {
     });
 
     it('should have correct styling for lock icon', () => {
-      const { container } = render(
+      render(
         <MeetingToolbar {...defaultProps} micLocked={true} />
       );
 
-      const lockIcon = container.querySelector('.lucide-lock');
+      const lockIcon = screen.getByTestId('mic-lock-icon');
       expect(lockIcon).toBeInTheDocument();
       
       // Check for expected classes from the component
