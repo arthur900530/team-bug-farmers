@@ -5,8 +5,10 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.ts?(x)', '**/?(*.)+(spec|test).ts?(x)'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },
+  setupFiles: ['jest-localstorage-mock'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
@@ -25,4 +27,3 @@ module.exports = {
     '!src/vite-env.d.ts',
   ],
 };
-
