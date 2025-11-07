@@ -8,8 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "testjest": "jest",
-    "jest --collectCoverage": "jest --collectCoverage"
+    "test": "jest",
+    "coverage": "jest --collectCoverage"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
