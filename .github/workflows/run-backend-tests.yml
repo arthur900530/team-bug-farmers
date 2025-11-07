@@ -1,0 +1,32 @@
+name: Run Backend Tests
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm i
+      
+      - name: Run backend tests
+        run: npx jest tests/backend
+      
+      - name: Run backend tests with coverage
+        run: npx jest tests/backend --collectCoverage
