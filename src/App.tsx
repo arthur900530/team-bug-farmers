@@ -7,6 +7,7 @@ import { MeetingView } from './components/MeetingView';
 import { AudioSettings } from './components/AudioSettings';
 import { AllSettings } from './components/AllSettings';
 import { ScreenShareSettings } from './components/ScreenShareSettings';
+import type { QualityTier, AckSummary, UserSession, ConnectionState } from './types';
 
 type Screen = 
   | 'join' 
@@ -27,26 +28,122 @@ export default function App() {
   const [showBanner, setShowBanner] = useState(false);
   const [micLocked, setMicLocked] = useState(false);
   const [hasTriedConnecting, setHasTriedConnecting] = useState(false);
-  const [audioDeviceConnected, setAudioDeviceConnected] = useState(true);
+
+  // New state from Dev Spec
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string>('');
+  const [connectionState, setConnectionState] = useState<ConnectionState>('Disconnected');
+  const [currentTier, setCurrentTier] = useState<QualityTier>('HIGH');
+  const [participants, setParticipants] = useState<UserSession[]>([]);
+  const [ackSummary, setAckSummary] = useState<AckSummary | null>(null);
 
   const navigateToScreen = (screen: Screen) => {
     setCurrentScreen(screen);
   };
 
-  const handleJoinMeeting = () => {
-    // First attempt always fails
+  const handleJoinMeeting = async (userId: string, meetingId: string, name: string) => {
+    // Store user info
+    setCurrentUserId(userId);
+    setCurrentMeetingId(meetingId);
+    setDisplayName(name);
+    
+    // Simulate connection process with state transitions
+    setConnectionState('Connecting');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    setConnectionState('Signaling');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    setConnectionState('Offering');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    setConnectionState('ICE_Gathering');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    setConnectionState('Waiting_Answer');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // First attempt fails for demo
     if (!hasTriedConnecting) {
+      setConnectionState('Disconnected');
       setCurrentScreen('connection-error');
       setHasTriedConnecting(true);
-    } else {
-      // Second attempt succeeds
-      setCurrentScreen('meeting');
+      return;
     }
+    
+    // Second attempt succeeds
+    setConnectionState('Connected');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    setConnectionState('Streaming');
+    setCurrentScreen('meeting');
+    
+    // Mock participants data
+    const mockParticipants: UserSession[] = [
+      {
+        userId: userId,
+        pcId: `pc-${userId}`,
+        qualityTier: 'HIGH',
+        lastCrc32: '',
+        connectionState: 'Streaming',
+        timestamp: Date.now()
+      },
+      {
+        userId: 'alice@example.com',
+        pcId: 'pc-alice',
+        qualityTier: 'HIGH',
+        lastCrc32: '',
+        connectionState: 'Streaming',
+        timestamp: Date.now()
+      },
+      {
+        userId: 'bob@example.com',
+        pcId: 'pc-bob',
+        qualityTier: 'MEDIUM',
+        lastCrc32: '',
+        connectionState: 'Streaming',
+        timestamp: Date.now()
+      }
+    ];
+    setParticipants(mockParticipants);
+    
+    // Mock ACK summary
+    setAckSummary({
+      meetingId: meetingId,
+      ackedUsers: ['alice@example.com', 'bob@example.com'],
+      missingUsers: []
+    });
+    
+    // Simulate dynamic quality changes every 10 seconds
+    const qualityInterval = setInterval(() => {
+      const tiers: QualityTier[] = ['HIGH', 'MEDIUM', 'LOW'];
+      const randomTier = tiers[Math.floor(Math.random() * tiers.length)];
+      setCurrentTier(randomTier);
+    }, 10000);
+    
+    // Simulate ACK updates every 2 seconds
+    const ackInterval = setInterval(() => {
+      const shouldHaveIssue = Math.random() > 0.8; // 20% chance of delivery issue
+      setAckSummary({
+        meetingId: meetingId,
+        ackedUsers: shouldHaveIssue ? ['alice@example.com'] : ['alice@example.com', 'bob@example.com'],
+        missingUsers: shouldHaveIssue ? ['bob@example.com'] : []
+      });
+    }, 2000);
+    
+    // Cleanup on unmount (in a real app, this would be in useEffect)
+    return () => {
+      clearInterval(qualityInterval);
+      clearInterval(ackInterval);
+    };
   };
 
-  const handleRetryConnection = () => {
-    // Retry succeeds and goes to meeting
-    setCurrentScreen('meeting');
+  const handleRetryConnection = async () => {
+    // Retry the connection with stored credentials
+    if (currentUserId && currentMeetingId) {
+      await handleJoinMeeting(currentUserId, currentMeetingId, displayName);
+    }
   };
 
   const handleMicToggle = () => {
@@ -55,12 +152,6 @@ export default function App() {
       setMicLocked(true);
       setCurrentScreen('muted');
     } else if (currentScreen === 'muted') {
-      // Check if audio device is connected
-      if (!audioDeviceConnected) {
-        setCurrentScreen('audio-device-error');
-        return;
-      }
-      
       // Simulate headphone malfunction - unmute and show banner
       setMicMuted(false);
       setMicLocked(false);
@@ -73,12 +164,6 @@ export default function App() {
         setCurrentScreen('meeting-clean');
       }, 3000);
     } else if (currentScreen === 'meeting-clean') {
-      // Check if audio device is connected
-      if (!audioDeviceConnected) {
-        setCurrentScreen('audio-device-error');
-        return;
-      }
-      
       setMicMuted(true);
       setMicLocked(true);
       setCurrentScreen('muted');
@@ -128,6 +213,12 @@ export default function App() {
               cameraOn={cameraOn}
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
+              currentTier={currentTier}
+              ackSummary={ackSummary}
+              participants={participants}
+              currentUserId={currentUserId || undefined}
+              connectionState={connectionState}
+              displayName={displayName || currentUserId || 'User'}
             />
             <AudioDeviceErrorModal
               onClose={handleCloseAudioDeviceError}
@@ -147,6 +238,12 @@ export default function App() {
             cameraOn={cameraOn}
             onMicToggle={handleMicToggle}
             onMicSettings={handleMicSettings}
+            currentTier={currentTier}
+            ackSummary={ackSummary}
+            participants={participants}
+            currentUserId={currentUserId || undefined}
+            connectionState={connectionState}
+            displayName={displayName || currentUserId || 'User'}
           />
         );
       
@@ -160,6 +257,12 @@ export default function App() {
               cameraOn={cameraOn}
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
+              currentTier={currentTier}
+              ackSummary={ackSummary}
+              participants={participants}
+              currentUserId={currentUserId || undefined}
+              connectionState={connectionState}
+              displayName={displayName || currentUserId || 'User'}
             />
             {/* Backdrop */}
             <div 
@@ -201,6 +304,12 @@ export default function App() {
               cameraOn={cameraOn}
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
+              currentTier={currentTier}
+              ackSummary={ackSummary}
+              participants={participants}
+              currentUserId={currentUserId || undefined}
+              connectionState={connectionState}
+              displayName={displayName || currentUserId || 'User'}
             />
             <AllSettings
               onNavigateToScreenShare={() => setCurrentScreen('screen-share-settings')}
@@ -219,6 +328,12 @@ export default function App() {
               cameraOn={cameraOn}
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
+              currentTier={currentTier}
+              ackSummary={ackSummary}
+              participants={participants}
+              currentUserId={currentUserId || undefined}
+              connectionState={connectionState}
+              displayName={displayName || currentUserId || 'User'}
             />
             <ScreenShareSettings
               onClose={() => setCurrentScreen('muted')}
@@ -236,20 +351,6 @@ export default function App() {
       {/* Only show ZoomWorkspace on join and connection-error screens */}
       {(currentScreen === 'join' || currentScreen === 'connection-error') && <ZoomWorkspace />}
       {renderCurrentScreen()}
-      
-      {/* Developer Controls - for testing */}
-      <div className="fixed bottom-4 right-4 bg-gray-800 p-4 rounded-lg shadow-lg z-50 text-white">
-        <div className="mb-2">Dev Controls:</div>
-        <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded transition-colors">
-          <input
-            type="checkbox"
-            checked={audioDeviceConnected}
-            onChange={(e) => setAudioDeviceConnected(e.target.checked)}
-            className="rounded cursor-pointer"
-          />
-          <span>Audio Device Connected</span>
-        </label>
-      </div>
     </div>
   );
 }

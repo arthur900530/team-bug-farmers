@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Mic, MicOff, Video, VideoOff, ChevronDown } from 'lucide-react';
 import { WindowControls } from './common/WindowControls';
 
 interface JoinMeetingModalProps {
   micOn: boolean;
   cameraOn: boolean;
-  onJoin: () => void;
+  onJoin: (userId: string, meetingId: string, displayName: string) => void;
   onMicToggle: () => void;
   onCameraToggle: () => void;
 }
@@ -17,6 +17,10 @@ export function JoinMeetingModal({
   onMicToggle, 
   onCameraToggle 
 }: JoinMeetingModalProps) {
+  const [userId, setUserId] = useState('');
+  const [meetingId, setMeetingId] = useState('');
+  const [displayName, setDisplayName] = useState('');
+
   const handleMicToggle = () => {
     try {
       onMicToggle();
@@ -35,7 +39,12 @@ export function JoinMeetingModal({
 
   const handleJoin = () => {
     try {
-      onJoin();
+      if (!userId.trim() || !meetingId.trim()) {
+        alert('Please enter both User ID and Meeting ID');
+        return;
+      }
+      const finalDisplayName = displayName.trim() || userId;
+      onJoin(userId, meetingId, finalDisplayName);
     } catch (error) {
       console.error('Error joining meeting:', error);
     }
@@ -47,7 +56,7 @@ export function JoinMeetingModal({
         {/* Window Controls */}
         <div className="flex items-center justify-between mb-4">
           <WindowControls showDots={true} />
-          <span className="text-gray-300">ntrappe@andrew.cmu.edu's Zoom Meeting</span>
+          <span className="text-gray-300">Join Meeting</span>
           <button 
             className="text-gray-400 hover:text-gray-200 hover:bg-gray-700 px-2 py-1 rounded transition-all"
             aria-label="More options"
@@ -56,10 +65,57 @@ export function JoinMeetingModal({
           </button>
         </div>
 
+        {/* Meeting Details Form */}
+        <div className="space-y-3 mb-4">
+          <div>
+            <label htmlFor="userId" className="block text-gray-300 text-sm mb-1">
+              User ID *
+            </label>
+            <input
+              id="userId"
+              type="text"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              placeholder="Enter your user ID"
+              className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="meetingId" className="block text-gray-300 text-sm mb-1">
+              Meeting ID *
+            </label>
+            <input
+              id="meetingId"
+              type="text"
+              value={meetingId}
+              onChange={(e) => setMeetingId(e.target.value)}
+              placeholder="Enter meeting ID"
+              className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="displayName" className="block text-gray-300 text-sm mb-1">
+              Display Name (optional)
+            </label>
+            <input
+              id="displayName"
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Enter display name"
+              className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+            />
+          </div>
+        </div>
+
         {/* Video Preview Area */}
         <div className="bg-black rounded-lg mb-6 h-48 flex items-center justify-center relative">
           <div className="text-center">
-            <div className="text-white text-2xl mb-2">ntrappe@andrew...</div>
+            <div className="text-white text-2xl mb-2">
+              {displayName || userId || 'Your Name'}
+            </div>
           </div>
         </div>
 
