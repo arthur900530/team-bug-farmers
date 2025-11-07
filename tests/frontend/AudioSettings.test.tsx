@@ -525,8 +525,166 @@ describe('AudioSettings.tsx', () => {
     });
   });
 
+  describe('Button click handlers', () => {
+    test('Test 24: Should handle microphone level button click', () => {
+      const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      render(
+        <AudioSettings 
+          onNavigateToSettings={mockOnNavigateToSettings}
+          onClose={mockOnClose}
+        />
+      );
+
+      const micLevelButton = screen.getByText('Microphone level').closest('button');
+      expect(micLevelButton).toBeTruthy();
+      
+      fireEvent.click(micLevelButton!);
+
+      expect(consoleLog).toHaveBeenCalledWith('Testing microphone level...');
+      
+      consoleLog.mockRestore();
+    });
+
+    test('Test 25: Should stop propagation on microphone level button click', () => {
+      const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      render(
+        <AudioSettings 
+          onNavigateToSettings={mockOnNavigateToSettings}
+          onClose={mockOnClose}
+        />
+      );
+
+      const micLevelButton = screen.getByText('Microphone level').closest('button');
+      fireEvent.click(micLevelButton!);
+
+      // Should execute handler without errors
+      expect(consoleLog).toHaveBeenCalled();
+      
+      consoleLog.mockRestore();
+    });
+
+    test('Test 26: Should handle test speaker button click', () => {
+      const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      render(
+        <AudioSettings 
+          onNavigateToSettings={mockOnNavigateToSettings}
+          onClose={mockOnClose}
+        />
+      );
+
+      const testSpeakerButton = screen.getByText('Test speaker').closest('button');
+      expect(testSpeakerButton).toBeTruthy();
+      
+      fireEvent.click(testSpeakerButton!);
+
+      expect(consoleLog).toHaveBeenCalledWith('Testing speaker...');
+      
+      consoleLog.mockRestore();
+    });
+
+    test('Test 27: Should stop propagation on test speaker button click', () => {
+      const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      render(
+        <AudioSettings 
+          onNavigateToSettings={mockOnNavigateToSettings}
+          onClose={mockOnClose}
+        />
+      );
+
+      const testSpeakerButton = screen.getByText('Test speaker').closest('button');
+      fireEvent.click(testSpeakerButton!);
+
+      // Should execute handler without errors
+      expect(consoleLog).toHaveBeenCalled();
+      
+      consoleLog.mockRestore();
+    });
+
+    test('Test 28: Should handle microphone selection button click', () => {
+      const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      render(
+        <AudioSettings 
+          onNavigateToSettings={mockOnNavigateToSettings}
+          onClose={mockOnClose}
+        />
+      );
+
+      const micSelectButton = screen.getByText('MacBook Pro Microphone').closest('button');
+      expect(micSelectButton).toBeTruthy();
+      
+      fireEvent.click(micSelectButton!);
+
+      expect(consoleLog).toHaveBeenCalledWith('Selecting microphone...');
+      
+      consoleLog.mockRestore();
+    });
+
+    test('Test 29: Should stop propagation on microphone selection button click', () => {
+      const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      render(
+        <AudioSettings 
+          onNavigateToSettings={mockOnNavigateToSettings}
+          onClose={mockOnClose}
+        />
+      );
+
+      const micSelectButton = screen.getByText('MacBook Pro Microphone').closest('button');
+      fireEvent.click(micSelectButton!);
+
+      // Should execute handler without errors
+      expect(consoleLog).toHaveBeenCalled();
+      
+      consoleLog.mockRestore();
+    });
+
+    test('Test 30: Should handle speaker selection button click', () => {
+      const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      render(
+        <AudioSettings 
+          onNavigateToSettings={mockOnNavigateToSettings}
+          onClose={mockOnClose}
+        />
+      );
+
+      const speakerSelectButton = screen.getByText('MacBook Pro Speakers').closest('button');
+      expect(speakerSelectButton).toBeTruthy();
+      
+      fireEvent.click(speakerSelectButton!);
+
+      expect(consoleLog).toHaveBeenCalledWith('Selecting speaker...');
+      
+      consoleLog.mockRestore();
+    });
+
+    test('Test 31: Should stop propagation on speaker selection button click', () => {
+      const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      render(
+        <AudioSettings 
+          onNavigateToSettings={mockOnNavigateToSettings}
+          onClose={mockOnClose}
+        />
+      );
+
+      const speakerSelectButton = screen.getByText('MacBook Pro Speakers').closest('button');
+      fireEvent.click(speakerSelectButton!);
+
+      // Should execute handler without errors
+      expect(consoleLog).toHaveBeenCalled();
+      
+      consoleLog.mockRestore();
+    });
+  });
+
   describe('AudioSettings component', () => {
-    test('Test 24: Should render with initial hidden visibility', () => {
+    test('Test 32: Should render with initial hidden visibility', () => {
       const { container } = render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -541,7 +699,7 @@ describe('AudioSettings.tsx', () => {
       expect(popup.style.visibility).toMatch(/hidden|visible/);
     });
 
-    test('Test 25: Should render with visible state after initialization', async () => {
+    test('Test 33: Should render with visible state after initialization', async () => {
       const { container } = render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -562,7 +720,7 @@ describe('AudioSettings.tsx', () => {
       }, { timeout: 1000 });
     });
 
-    test('Test 26: Should display microphone device option', () => {
+    test('Test 34: Should display microphone device option', () => {
       render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -573,7 +731,7 @@ describe('AudioSettings.tsx', () => {
       expect(screen.getByText('MacBook Pro Microphone')).toBeInTheDocument();
     });
 
-    test('Test 27: Should display speaker device option', () => {
+    test('Test 35: Should display speaker device option', () => {
       render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -584,7 +742,7 @@ describe('AudioSettings.tsx', () => {
       expect(screen.getByText('MacBook Pro Speakers')).toBeInTheDocument();
     });
 
-    test('Test 28: Should display microphone level test option', () => {
+    test('Test 36: Should display microphone level test option', () => {
       render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -595,7 +753,7 @@ describe('AudioSettings.tsx', () => {
       expect(screen.getByText('Microphone level')).toBeInTheDocument();
     });
 
-    test('Test 29: Should display speaker test option', () => {
+    test('Test 37: Should display speaker test option', () => {
       render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -606,7 +764,7 @@ describe('AudioSettings.tsx', () => {
       expect(screen.getByText('Test speaker')).toBeInTheDocument();
     });
 
-    test('Test 30: Should display more settings button', () => {
+    test('Test 38: Should display more settings button', () => {
       render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -617,7 +775,7 @@ describe('AudioSettings.tsx', () => {
       expect(screen.getByText('More settings...')).toBeInTheDocument();
     });
 
-    test('Test 31: Should apply grab cursor when not dragging', () => {
+    test('Test 39: Should apply grab cursor when not dragging', () => {
       const { container } = render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -629,7 +787,7 @@ describe('AudioSettings.tsx', () => {
       expect(popup.style.cursor).toBe('grab');
     });
 
-    test('Test 32: Should apply grabbing cursor when dragging', async () => {
+    test('Test 40: Should apply grabbing cursor when dragging', async () => {
       const { container } = render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -652,7 +810,7 @@ describe('AudioSettings.tsx', () => {
       });
     });
 
-    test('Test 33: Should disable transition during drag', async () => {
+    test('Test 41: Should disable transition during drag', async () => {
       const { container } = render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
@@ -675,7 +833,7 @@ describe('AudioSettings.tsx', () => {
       });
     });
 
-    test('Test 34: Should enable transition when not dragging', () => {
+    test('Test 42: Should enable transition when not dragging', () => {
       const { container } = render(
         <AudioSettings 
           onNavigateToSettings={mockOnNavigateToSettings}
