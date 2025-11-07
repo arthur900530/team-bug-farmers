@@ -2,6 +2,9 @@
 
 A modern, real-time audio conferencing application built with React and TypeScript, featuring adaptive quality control, audio delivery verification, and comprehensive participant management.
 
+[![Run Frontend Tests](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-frontend-tests.yml/badge.svg)](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-frontend-tests.yml)
+[![Run Backend Tests](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-backend-tests.yml/badge.svg)](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-backend-tests.yml)
+
 ---
 
 ## 🎯 Features
