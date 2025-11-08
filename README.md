@@ -82,6 +82,43 @@ This application implements three core user stories for reliable real-time audio
 
 ---
 
+### Run Tests Locally
+
+Follow these one-line commands to run tests locally. Perfect for a quick check.
+
+- Install dependencies:
+
+```bash
+npm i
+```
+
+- Run all tests:
+
+```bash
+npm run test
+```
+
+- Run only frontend tests (tests/frontend):
+
+```bash
+npm run test:frontend
+```
+
+- Run only backend tests (tests/backend):
+
+```bash
+npm run test:backend
+```
+
+- Run coverage (generates coverage report in `coverage/`):
+
+```bash
+npm run coverage
+```
+
+Each command above runs synchronously and prints results to your terminal.
+
+
 ## 🛠️ Tech Stack
 
 ### **Frontend**

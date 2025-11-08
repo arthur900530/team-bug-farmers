@@ -10,8 +10,9 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "coverage": "jest --collectCoverage"
+    "coverage": "jest --collectCoverage",
+    "test:frontend": "jest tests/frontend --runInBand",
+    "test:backend": "jest tests/backend --runInBand"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
