@@ -204,17 +204,119 @@ cd backend && npx tsc test-mediasoup-init.ts --esModuleInterop --module commonjs
 ---
 
 ### Test P2.1.2: MediasoupManager Transport Creation
-**Status:** ⬜ **NOT TESTED YET**
+**Status:** ✅ **PASS**
+
+**Execution:**
+```bash
+cd backend && npx tsc test-mediasoup-transport.ts ... && node test-mediasoup-transport.js
+```
+
+**Result:**
+- ✅ Transport created successfully
+- ✅ Transport ID: c2589e1c-90c6-4ceb-8773-d15b24f35055
+- ✅ ICE parameters present (usernameFragment, password)
+- ✅ ICE candidates: 2 candidates (host type)
+- ✅ DTLS parameters present (5 fingerprints)
+- ✅ First ICE candidate: host 127.0.0.1:49434
+- ✅ First DTLS fingerprint: sha-256
+
+**Verification:**
+- ✅ `createTransport()` returns transport parameters
+- ✅ Transport ID is non-empty string
+- ✅ ICE parameters include `usernameFragment` and `password`
+- ✅ ICE candidates array is non-empty (2 candidates)
+- ✅ DTLS parameters include fingerprints (5 fingerprints)
+
+**Notes:** Transport creation works correctly with all required parameters for WebRTC connection.
 
 ---
 
 ### Test P2.1.3: MediasoupManager Producer Creation
-**Status:** ⬜ **NOT TESTED YET**
+**Status:** ✅ **PASS**
+
+**Execution:**
+```bash
+cd backend && npx tsc test-mediasoup-producer.ts ... && node test-mediasoup-producer.js
+```
+
+**Result:**
+- ✅ Transport created and connected
+- ✅ Producer created successfully
+- ✅ Producer ID: fc6745a5-57c3-4d6c-a6c9-ac0ee757da4d
+- ✅ Producer verified in `producers` Map
+- ✅ Producer stats retrieved (0 entries - normal if no RTP received yet)
+
+**Verification:**
+- ✅ `createProducer()` returns Producer ID
+- ✅ Producer exists in `producers` Map
+- ✅ Producer is active and ready to receive RTP
+
+**Notes:** Producer creation works correctly. Producer is ready to receive RTP packets from client.
 
 ---
 
 ### Test P2.1.4: MediasoupManager Consumer Creation
-**Status:** ⬜ **NOT TESTED YET**
+**Status:** ✅ **PASS**
+
+**Execution:**
+```bash
+cd backend && npx tsc test-mediasoup-consumer.ts ... && node test-mediasoup-consumer.js
+```
+
+**Result:**
+- ✅ Sender transport and Producer created
+- ✅ Receiver transport created and connected
+- ✅ Consumer created successfully
+- ✅ Consumer ID: b92de21c-8d2d-4d2f-b3f4-aa1866b0c4b2
+- ✅ Consumer Producer ID matches sender Producer
+- ✅ Consumer kind: audio
+- ✅ Consumer RTP parameters verified (1 codec)
+
+**Verification:**
+- ✅ `createConsumer()` returns Consumer object
+- ✅ Consumer exists in `consumers` Map
+- ✅ Consumer RTP parameters are valid (codecs present)
+
+**Notes:** Consumer creation works correctly. Consumer is ready to forward RTP from Producer to receiver.
+
+---
+
+### Test P2.2.1: MeetingRegistry Operations
+**Status:** ✅ **PASS**
+
+**Execution:**
+```bash
+cd backend && npx tsc test-meeting-registry.ts ... && node test-meeting-registry.js
+```
+
+**Result:**
+- ✅ `registerUser()` creates meeting if needed
+- ✅ `registerUser()` adds second user correctly
+- ✅ `listRecipients()` returns all users (2 users)
+- ✅ `listRecipients()` excludes user correctly (1 user when excluding)
+- ✅ `getUserSession()` returns correct session
+- ✅ `updateQualityTier()` updates meeting tier (HIGH → MEDIUM)
+- ✅ `removeUser()` removes user but keeps meeting
+- ✅ `removeUser()` deletes meeting when empty
+- ✅ `getMeeting()` returns null for non-existent meeting
+
+**Verification:**
+- ✅ All 9 test cases passed
+- ✅ Meeting lifecycle managed correctly
+- ✅ User sessions tracked correctly
+- ✅ Quality tier updates work
+
+**Notes:** MeetingRegistry operations work correctly. All methods from `dev_specs/APIs.md` implemented and tested.
+
+---
+
+### Test P2.2.2: SignalingServer Message Handling
+**Status:** ⚠️ **DEFERRED TO PHASE 3**
+
+**Reason:** SignalingServer message handling requires WebSocket connections and is better tested in Phase 3 (Integration Testing) with actual client connections.
+
+**Will be tested in:**
+- Phase 3.1.1: Complete Signaling Flow (2 Clients)
 
 ---
 
@@ -261,11 +363,12 @@ cd backend && npx tsc test-mediasoup-init.ts --esModuleInterop --module commonjs
 
 ## Overall Test Progress
 
-**Completed:** 6/27 tests (22%)  
-**Passed:** 4 tests  
+**Completed:** 11/27 tests (41%)  
+**Passed:** 9 tests  
 **Partial Pass:** 2 tests  
 **Failed:** 0 tests  
-**Not Tested:** 21 tests
+**Deferred:** 1 test (to Phase 3)  
+**Not Tested:** 15 tests
 
 ---
 
