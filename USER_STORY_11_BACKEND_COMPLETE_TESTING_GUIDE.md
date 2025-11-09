@@ -31,12 +31,18 @@
 | Phase 5: Stress Testing | ⬜ NOT STARTED | 0 | 9 | 0% |
 | **TOTAL** | **⬜ IN PROGRESS** | **14** | **27** | **52%** |
 
+**Note:** Test count matches `USER_STORY_11_TEST_RESULTS.md`. Phase 3 includes P3.1.1 Original and P3.1.1 Enhanced as separate test runs (different verification levels, same functionality).
+
 ### Quick Reference
 
 **Test Files Location:** `backend/src/tests/`  
-**Backend Server:** `cd backend && npm run dev` (port 8080)  
-**Frontend Server:** `npm run dev` (port 5173)  
+**Backend Server:** `cd backend && npm run dev` (port 8080, WebSocket: `ws://localhost:8080`)  
+**Frontend Server:** `npm run dev` (port 5173, HTTP: `http://localhost:5173`)  
 **Simulation Script:** `backend/src/tests/test-phase4-simulation.ts`
+
+**Note:** 
+- Development uses `ws://` (unencrypted WebSocket). Production uses `wss://` (TLS) per `dev_specs/public_interfaces.md`.
+- JWT authentication is specified in `dev_specs/public_interfaces.md` but simplified for User Story 11 implementation (see `SignalingServer.ts` line 153).
 
 ---
 
@@ -450,6 +456,11 @@ node dist/tests/test-meeting-registry.js
 
 **Backend Component Testing:** All backend components (MediasoupManager, MeetingRegistry) work correctly.
 
+**Phase 2 Revisions Summary:**
+- ✅ Added P2.1.5 (RTP Parameter Extraction test) - Direct test of extraction logic with edge cases
+- ✅ Enhanced P2.1.3 (Producer Creation) - Now verifies Producer exists in Map and has valid ID
+- ✅ Enhanced P2.1.4 (Consumer Creation) - Now verifies Consumer exists and has valid properties (producerId, kind, rtpParameters)
+
 ---
 
 ## Phase 3: Integration Testing
@@ -581,6 +592,10 @@ node dist/tests/test-producer-consumer-flow.js
 **Phase 3 Status:** ✅ **COMPLETE** (3/3 tests passed, 100%)
 
 **Integration Testing:** WebSocket connections, SignalingServer, Producer/Consumer creation all work correctly.
+
+**Phase 3 Revisions Summary:**
+- ✅ Added P3.1.1 Enhanced (Complete Signaling Flow with Verification) - Verifies RTP extraction, Producer/Consumer creation via enhanced verification methods
+- ✅ Enhanced verification methods: RTP extraction verified via successful SDP answer generation, Producer creation verified via successful answer handling, Consumer creation verified via server log inspection
 
 ---
 
@@ -757,7 +772,7 @@ npm run dev
 - ✅ Client B plays audio
 - ✅ Audio is audible on Client B (manual verification)
 - ✅ No audio dropouts or glitches
-- ✅ Latency is acceptable (< 500ms end-to-end)
+- ✅ Latency is acceptable (< 200ms end-to-end per `dev_specs/public_interfaces.md` Media Performance Targets)
 
 #### Expected Server Logs
 
@@ -926,7 +941,8 @@ setInterval(monitorReceiverStats, 2000);
 **Success Criteria:**
 - ✅ **Client A**: `packetsSent > 0` and **increasing** when speaking
 - ✅ **Client B**: `packetsReceived > 0` and **increasing** when Client A speaks
-- ✅ **Packet rate**: ~50 packets/second (Opus 20ms frames = 50 fps)
+- ✅ **Packet rate**: ~50 packets/second per tier (Opus 20ms frames = 50 fps)
+- ✅ **Simulcast sender rate**: ~150 packets/second total (3 tiers × 50 pkts/sec) per `dev_specs/public_interfaces.md`
 
 #### Method 2: Server Logs (Producer/Consumer Activity)
 
@@ -1029,12 +1045,52 @@ node dist/tests/test-phase4-simulation.js
 - ✅ Backend processes requests properly
 - ✅ Connection states transition as expected
 
+**Key Findings:**
+
+1. **"Waiting for response..." State**
+   - **Status:** ✅ **Working correctly**
+   - The state appears when client sends SDP offer
+   - Server responds with SDP answer within **~1 second**
+   - State transitions from `Waiting_Answer` → `Connected` → `Streaming`
+   - **In browser:** "Waiting for response..." should disappear after 1-3 seconds
+   - **If stuck:** Check browser console for WebSocket errors, backend logs for SDP answer generation errors, verify WebSocket connection is still active
+
+2. **Participant List Updates**
+   - **Status:** ✅ **Working correctly**
+   - When Client B joins, Client A receives `user-joined` event
+   - Participant list should update automatically in both browsers
+   - Both clients see each other in the participant list
+
+3. **SDP Offer-Answer Flow**
+   - **Status:** ✅ **Working correctly**
+   - Server successfully processes SDP offers
+   - Server generates SDP answers
+   - Answers are sent back to clients via WebSocket
+   - Connection state transitions correctly
+
+**Expected Browser Behavior:**
+
+Based on the simulation, when you open two browser windows:
+
+1. **Window 1 (test-user-a):**
+   - Joins meeting → sees "test-user-a" in participant list
+   - Sends offer → shows "Waiting for response..." for ~1-3 seconds
+   - Receives answer → "Waiting for response..." disappears
+   - Connection state shows "Streaming"
+   - When Window 2 joins → participant list updates to show "test-user-b"
+
+2. **Window 2 (test-user-b):**
+   - Joins meeting → sees both "test-user-a" and "test-user-b" in participant list
+   - Sends offer → shows "Waiting for response..." for ~1-3 seconds
+   - Receives answer → "Waiting for response..." disappears
+   - Connection state shows "Streaming"
+
 **Limitations:**
 - ⚠️ Does NOT verify actual RTP media transmission
 - ⚠️ Does NOT verify audio quality
 - ⚠️ Does NOT verify microphone/speaker functionality
 
-**Conclusion:** Simulation confirms signaling infrastructure is ready. Phase 4 still requires manual browser testing with actual audio devices.
+**Conclusion:** Simulation confirms signaling infrastructure is ready. Phase 4 still requires manual browser testing with actual audio devices. The "Waiting for response..." message is expected behavior and should resolve within 1-3 seconds when the server sends the SDP answer.
 
 ---
 
@@ -1207,10 +1263,13 @@ lsof -ti:8080 | xargs kill
 ### File Locations
 
 - **Test Files:** `backend/src/tests/`
+  - Active tests: `test-mediasoup-init.ts`, `test-mediasoup-transport.ts`, `test-mediasoup-producer.ts`, `test-mediasoup-consumer.ts`, `test-meeting-registry.ts`, `test-rtp-extraction.ts`, `test-signaling-flow.ts`, `test-signaling-flow-enhanced.ts`, `test-producer-consumer-flow.ts`, `test-phase4-simulation.ts`
+  - Reference script: `test-phase4-verification.ts` (not actively used)
 - **Backend Source:** `backend/src/`
 - **Frontend Source:** `src/`
 - **Test Results:** `USER_STORY_11_TEST_RESULTS.md`
 - **Testing Plan:** `USER_STORY_11_TESTING_PLAN.md`
+- **Dev Specs:** `assets/dev_specs/` (treat as "holy bible" - all implementation must comply)
 
 ### Browser Console Access
 
@@ -1262,9 +1321,27 @@ const stats = await window.userClient.getPeerConnectionStats()
 
 ### Known Limitations
 
-- **Mock SDP vs Real SDP:** Phase 3 tests use simplified mock SDP, Phase 4 uses real browser SDP
-- **Audio Quality:** Cannot be fully automated, requires manual verification
-- **Local Testing:** When testing on same laptop, use RTP stats instead of hearing
+#### Phase 3 Testing Limitations
+
+- **Mock SDP vs Real SDP:** Phase 3 tests use simplified mock SDP, not real WebRTC SDP from actual browsers. Real WebRTC SDP has more complex structure (multiple ICE candidates, actual DTLS fingerprints, complex codec negotiation, SSRC information, simulcast parameters).
+- **RTP Parameter Extraction:** Phase 3 tests don't directly verify that `extractRtpParametersFromSdp()` extracts valid parameters. This is verified indirectly via successful SDP answer generation (P3.1.1 Enhanced) and directly via dedicated test (P2.1.5).
+- **Producer/Consumer Creation:** Phase 3 tests verify creation flow completes, but don't verify mediasoup state. This is addressed in Phase 2 enhanced tests (P2.1.3, P2.1.4) and Phase 3 enhanced test (P3.1.1 Enhanced).
+- **DTLS Connection State:** Can't easily verify transport connection state from client. Workaround: Verify via successful Producer/Consumer creation.
+- **Server Log Reading:** Server logs go to stdout, hard to parse from test. Workaround: Manual inspection instructions provided in test descriptions.
+- **Error Scenario Testing:** Limited error scenario testing in Phase 3. Error handling is tested implicitly via successful flows.
+
+#### Phase 4 Testing Limitations
+
+- **Audio Quality:** Cannot be fully automated, requires manual verification (subjective human perception needed for clarity, dropouts, echo, feedback).
+- **Local Testing:** When testing on same laptop, use RTP stats instead of hearing (microphone picks up speaker audio, creating feedback loop).
+- **Real Audio Devices:** Requires actual microphone input and speaker output. Cannot be fully simulated without real audio hardware.
+- **Automation Scope:** Technical metrics (RTP stats, Producer/Consumer) can be automated (~80%), but subjective audio quality requires manual input (~20%).
+
+#### Implementation Limitations
+
+- **JWT Authentication:** `dev_specs/public_interfaces.md` specifies JWT authentication, but User Story 11 implementation uses simplified authentication (see `SignalingServer.ts` line 153). Full JWT implementation is deferred.
+- **WebSocket Protocol:** Development uses `ws://` (unencrypted). Production must use `wss://` (TLS) per `dev_specs/public_interfaces.md`.
+- **Test File Note:** `test-phase4-verification.ts` exists in `backend/src/tests/` but is a reference script, not an active test. Use `test-phase4-simulation.ts` for automated Phase 4 verification.
 
 ---
 
