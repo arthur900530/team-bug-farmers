@@ -13,9 +13,54 @@
  */
 
 import WebSocket from 'ws';
+import { createConnection } from 'net';
+
+/**
+ * Phase 4 Simulation Test
+ * 
+ * From dev_specs/public_interfaces.md:
+ * - WebSocket endpoint: ws://localhost:8080 (development)
+ * - Protocol: WebSocket (ws:// for dev, wss:// for production)
+ * - Message Format: JSON messages
+ * 
+ * From dev_specs/flow_charts.md:
+ * - Flow 1 (lines 23-44): Meeting join with SDP/ICE negotiation
+ * - SignalingClient.connect → WebSocket URL
+ * - SignalingClient.sendJoin → meetingId, userId
+ */
 
 const SERVER_URL = 'ws://localhost:8080';
+const SERVER_PORT = 8080;
+const SERVER_HOST = 'localhost';
 const MEETING_ID = 'test-meeting-phase4-sim';
+
+/**
+ * Check if backend server is running before attempting connection
+ * From dev_specs/public_interfaces.md: WebSocket endpoint should be available
+ * 
+ * This prevents ECONNREFUSED errors and provides clear feedback
+ */
+async function checkServerAvailability(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection(SERVER_PORT, SERVER_HOST);
+    
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    
+    socket.on('error', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    
+    // Timeout after 2 seconds
+    setTimeout(() => {
+      socket.destroy();
+      resolve(false);
+    }, 2000);
+  });
+}
 
 interface SimulatedClient {
   ws: WebSocket;
@@ -51,8 +96,16 @@ function createSimulatedClient(userId: string, displayName: string): Promise<Sim
       resolve(client);
     });
 
-    ws.on('error', (error) => {
-      console.error(`[${userId}] WebSocket error:`, error);
+    ws.on('error', (error: Error) => {
+      // From dev_specs/public_interfaces.md: WebSocket connection must succeed
+      // Provide clear error message if connection fails
+      if ((error as any).code === 'ECONNREFUSED') {
+        console.error(`[${userId}] ❌ WebSocket connection refused`);
+        console.error(`[${userId}]    Backend server is not running on ${SERVER_URL}`);
+        console.error(`[${userId}]    Please start the backend server first: cd backend && npm run dev`);
+      } else {
+        console.error(`[${userId}] WebSocket error:`, error);
+      }
       reject(error);
     });
 
@@ -157,6 +210,36 @@ async function simulatePhase4Flow() {
   console.log('='.repeat(60));
   console.log(`Server: ${SERVER_URL}`);
   console.log(`Meeting: ${MEETING_ID}`);
+  console.log('');
+
+  // Pre-flight check: Verify backend server is running
+  // From dev_specs/public_interfaces.md: WebSocket endpoint must be available
+  console.log('🔍 Checking if backend server is running...');
+  const serverAvailable = await checkServerAvailability();
+  
+  if (!serverAvailable) {
+    console.log('');
+    console.log('❌❌❌ BACKEND SERVER NOT RUNNING ❌❌❌');
+    console.log('');
+    console.log('The simulation cannot run because the backend server is not available.');
+    console.log('');
+    console.log('To fix this:');
+    console.log('1. Open a terminal');
+    console.log('2. Navigate to the backend directory:');
+    console.log('   cd backend');
+    console.log('3. Start the backend server:');
+    console.log('   npm run dev');
+    console.log('');
+    console.log('You should see:');
+    console.log('   [SignalingServer] WebSocket server started on port 8080');
+    console.log('   [MediasoupManager] Initialization complete');
+    console.log('');
+    console.log('Then run this simulation again.');
+    console.log('');
+    process.exit(1);
+  }
+  
+  console.log('✅ Backend server is running');
   console.log('');
 
   try {
