@@ -571,11 +571,19 @@ export class UserClient {
    * Get WebRTC peer connection stats
    * For Phase 4 testing: Verify RTP packet transmission/reception
    */
-  async getPeerConnectionStats(): Promise<Map<string, RTCStatsReport>> {
+  async getPeerConnectionStats(): Promise<RTCStatsReport> {
     if (!this.peerConnection) {
       throw new Error('Peer connection not established');
     }
     return await this.peerConnection.getStats();
+  }
+
+  /**
+   * Get SignalingClient instance
+   * For App.tsx to set up participant update callbacks
+   */
+  getSignalingClient(): SignalingClient {
+    return this.signalingClient;
   }
 }
 

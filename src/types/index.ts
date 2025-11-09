@@ -97,6 +97,26 @@ export interface AckSummaryMessage {
   timestamp: number;
 }
 
+export interface OfferMessage {
+  type: 'offer';
+  meetingId: string;
+  sdp: string;
+}
+
+export interface AnswerMessage {
+  type: 'answer';
+  meetingId: string;
+  sdp: string;
+}
+
+export interface IceCandidateMessage {
+  type: 'ice-candidate';
+  meetingId: string;
+  candidate: string;
+  sdpMid: string;
+  sdpMLineIndex: number;
+}
+
 export interface ErrorMessage {
   type: 'error';
   code: number;

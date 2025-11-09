@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ZoomWorkspace } from './components/ZoomWorkspace';
 import { JoinMeetingModal } from './components/JoinMeetingModal';
 import { ConnectionErrorModal } from './components/ConnectionErrorModal';
@@ -7,6 +7,7 @@ import { MeetingView } from './components/MeetingView';
 import { AudioSettings } from './components/AudioSettings';
 import { AllSettings } from './components/AllSettings';
 import { ScreenShareSettings } from './components/ScreenShareSettings';
+import { UserClient } from './services/UserClient';
 import type { QualityTier, AckSummary, UserSession, ConnectionState } from './types';
 
 type Screen = 
@@ -37,6 +38,9 @@ export default function App() {
   const [currentTier, setCurrentTier] = useState<QualityTier>('HIGH');
   const [participants, setParticipants] = useState<UserSession[]>([]);
   const [ackSummary, setAckSummary] = useState<AckSummary | null>(null);
+  
+  // UserClient instance for real backend connection
+  const userClientRef = useRef<UserClient | null>(null);
 
   const navigateToScreen = (screen: Screen) => {
     setCurrentScreen(screen);
@@ -48,103 +52,85 @@ export default function App() {
     setCurrentMeetingId(meetingId);
     setDisplayName(name);
     
-    // Simulate connection process with state transitions
-    setConnectionState('Connecting');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    setConnectionState('Signaling');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    setConnectionState('Offering');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    setConnectionState('ICE_Gathering');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    setConnectionState('Waiting_Answer');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // First attempt fails for demo
-    if (!hasTriedConnecting) {
+    try {
+      // Create UserClient instance
+      const userClient = new UserClient(userId, meetingId, name);
+      userClientRef.current = userClient;
+      
+      // Set up connection state callback
+      userClient.setOnConnectionStateChange((state) => {
+        setConnectionState(state);
+        if (state === 'Streaming') {
+          setCurrentScreen('meeting');
+        }
+      });
+      
+      // Set up participant updates from 'joined' message
+      const signalingClient = userClient.getSignalingClient();
+      signalingClient.onJoined((joinedMsg) => {
+        // Convert participant IDs to UserSession objects
+        const participantSessions: UserSession[] = joinedMsg.participants.map((participantId: string) => ({
+          userId: participantId,
+          pcId: `pc-${participantId}`,
+          qualityTier: 'HIGH', // Default, will be updated by QualityController (User Story 8)
+          lastCrc32: '',
+          connectionState: 'Streaming',
+          timestamp: Date.now()
+        }));
+        setParticipants(participantSessions);
+      });
+      
+      // Set up participant updates from 'user-joined' events
+      signalingClient.onUserJoined((userJoinedMsg) => {
+        // Add new participant to list
+        setParticipants(prev => {
+          // Check if participant already exists
+          if (prev.some(p => p.userId === userJoinedMsg.userId)) {
+            return prev;
+          }
+          // Add new participant
+          return [...prev, {
+            userId: userJoinedMsg.userId,
+            pcId: `pc-${userJoinedMsg.userId}`,
+            qualityTier: 'HIGH',
+            lastCrc32: '',
+            connectionState: 'Streaming',
+            timestamp: Date.now()
+          }];
+        });
+      });
+      
+      // Join meeting using UserClient
+      await userClient.joinMeeting();
+      
+      // Update connection state (UserClient will update via callback)
+      setConnectionState(userClient.getConnectionState());
+      
+    } catch (error) {
+      console.error('[App] Failed to join meeting:', error);
       setConnectionState('Disconnected');
       setCurrentScreen('connection-error');
       setHasTriedConnecting(true);
-      return;
     }
-    
-    // Second attempt succeeds
-    setConnectionState('Connected');
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    setConnectionState('Streaming');
-    setCurrentScreen('meeting');
-    
-    // Mock participants data
-    const mockParticipants: UserSession[] = [
-      {
-        userId: userId,
-        pcId: `pc-${userId}`,
-        qualityTier: 'HIGH',
-        lastCrc32: '',
-        connectionState: 'Streaming',
-        timestamp: Date.now()
-      },
-      {
-        userId: 'alice@example.com',
-        pcId: 'pc-alice',
-        qualityTier: 'HIGH',
-        lastCrc32: '',
-        connectionState: 'Streaming',
-        timestamp: Date.now()
-      },
-      {
-        userId: 'bob@example.com',
-        pcId: 'pc-bob',
-        qualityTier: 'MEDIUM',
-        lastCrc32: '',
-        connectionState: 'Streaming',
-        timestamp: Date.now()
-      }
-    ];
-    setParticipants(mockParticipants);
-    
-    // Mock ACK summary
-    setAckSummary({
-      meetingId: meetingId,
-      ackedUsers: ['alice@example.com', 'bob@example.com'],
-      missingUsers: []
-    });
-    
-    // Simulate dynamic quality changes every 10 seconds
-    const qualityInterval = setInterval(() => {
-      const tiers: QualityTier[] = ['HIGH', 'MEDIUM', 'LOW'];
-      const randomTier = tiers[Math.floor(Math.random() * tiers.length)];
-      setCurrentTier(randomTier);
-    }, 10000);
-    
-    // Simulate ACK updates every 2 seconds
-    const ackInterval = setInterval(() => {
-      const shouldHaveIssue = Math.random() > 0.8; // 20% chance of delivery issue
-      setAckSummary({
-        meetingId: meetingId,
-        ackedUsers: shouldHaveIssue ? ['alice@example.com'] : ['alice@example.com', 'bob@example.com'],
-        missingUsers: shouldHaveIssue ? ['bob@example.com'] : []
-      });
-    }, 2000);
-    
-    // Cleanup on unmount (in a real app, this would be in useEffect)
-    return () => {
-      clearInterval(qualityInterval);
-      clearInterval(ackInterval);
-    };
   };
 
   const handleRetryConnection = async () => {
     // Retry the connection with stored credentials
     if (currentUserId && currentMeetingId) {
+      setHasTriedConnecting(true); // Mark as retry attempt
       await handleJoinMeeting(currentUserId, currentMeetingId, displayName);
     }
   };
+  
+  // Cleanup UserClient on unmount
+  useEffect(() => {
+    return () => {
+      if (userClientRef.current) {
+        userClientRef.current.leaveMeeting();
+        userClientRef.current = null;
+      }
+    };
+  }, []);
 
   const handleMicToggle = () => {
     if (currentScreen === 'meeting') {

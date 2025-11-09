@@ -43,6 +43,7 @@ export class SignalingClient {
   private tierChangeCallbacks: MessageCallback<string>[] = [];
   private ackSummaryCallbacks: MessageCallback<AckSummary>[] = [];
   private joinedCallbacks: MessageCallback<JoinedMessage>[] = [];
+  private userJoinedCallbacks: MessageCallback<{ type: 'user-joined'; userId: string }>[] = [];
   private errorCallbacks: MessageCallback<ErrorMessage>[] = [];
 
   /**
@@ -92,6 +93,12 @@ export class SignalingClient {
       switch (message.type) {
         case 'joined':
           this.joinedCallbacks.forEach(cb => cb(message as JoinedMessage));
+          break;
+
+        case 'user-joined':
+          // From dev_specs/flow_charts.md line 42: "NotifyOthers: User joined event"
+          const userJoinedMsg = message as { type: 'user-joined'; userId: string };
+          this.userJoinedCallbacks.forEach(cb => cb(userJoinedMsg));
           break;
 
         case 'offer':
@@ -246,6 +253,14 @@ export class SignalingClient {
    */
   onAckSummary(callback: MessageCallback<AckSummary>): void {
     this.ackSummaryCallbacks.push(callback);
+  }
+
+  /**
+   * Register callback for USER-JOINED messages
+   * From dev_specs/flow_charts.md line 42: "NotifyOthers: User joined event"
+   */
+  onUserJoined(callback: MessageCallback<{ type: 'user-joined'; userId: string }>): void {
+    this.userJoinedCallbacks.push(callback);
   }
 
   /**

@@ -161,7 +161,7 @@ await clientB.joinMeeting();
 ```javascript
 // Get peer connection stats
 const stats = await clientA.getPeerConnectionStats();
-// Convert Map to Array and find audio sender stats
+// RTCStatsReport is a Map-like object, convert to Array
 const statsArray = Array.from(stats.values());
 const senderStats = statsArray.find(s => 
   s.type === 'outbound-rtp' && 
@@ -180,7 +180,7 @@ if (senderStats) {
 ```javascript
 // Get peer connection stats
 const stats = await clientB.getPeerConnectionStats();
-// Convert Map to Array and find audio receiver stats
+// RTCStatsReport is a Map-like object, convert to Array
 const statsArray = Array.from(stats.values());
 const receiverStats = statsArray.find(s => 
   s.type === 'inbound-rtp' && 
