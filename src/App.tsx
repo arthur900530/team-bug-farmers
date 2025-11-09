@@ -103,6 +103,11 @@ export default function App() {
       // Join meeting using UserClient
       await userClient.joinMeeting();
       
+      // Expose UserClient globally for browser console debugging (Phase 4 testing)
+      // This allows verification scripts to access UserClient instance
+      (window as any).userClient = userClient;
+      console.log('[App] UserClient exposed globally as window.userClient (for Phase 4 testing)');
+      
       // Update connection state (UserClient will update via callback)
       setConnectionState(userClient.getConnectionState());
       
