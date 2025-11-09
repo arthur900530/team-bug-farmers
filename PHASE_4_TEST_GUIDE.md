@@ -26,13 +26,16 @@ Phase 4 tests verify complete audio transmission from sender microphone through 
 
 3. **Browser Setup:**
    - Open `http://localhost:5173` in your browser
-   - 2+ browser windows/tabs (or different browsers)
+   - **For Phase 4 testing:** Open the SAME URL (`http://localhost:5173`) in **TWO separate browser windows/tabs**
+     - Window 1 = Client A (sender)
+     - Window 2 = Client B (receiver)
    - Microphone access granted
    - Speakers enabled
 
-**Important:** You need BOTH servers running:
-- **Backend** (port 8080) - WebSocket signaling server
-- **Frontend** (port 5173) - React application UI
+**Important:** 
+- **Backend** (port 8080) - Runs in terminal, NOT opened in browser
+- **Frontend** (port 5173) - Open this URL in browser
+- **For testing:** Open frontend URL in TWO browser windows to simulate two clients
 
 ---
 
@@ -78,8 +81,9 @@ Verify frontend logs show:
 
 #### 2. Open Client A (Sender) in Browser
 
-**Option A: Use Frontend Application**
-- Open `http://localhost:5173` (or your frontend URL)
+**Open First Browser Window:**
+- Open `http://localhost:5173` in your browser
+- This is **Window 1** (Client A - sender)
 - Join meeting with user ID: `test-user-a`
 - Meeting ID: `test-meeting-phase4`
 
@@ -113,10 +117,11 @@ console.log('Local audio level:', audioLevel); // Should be > 0 when speaking
 
 #### 4. Open Client B (Receiver) in Browser
 
-**Option A: Use Frontend Application**
-- Open `http://localhost:5173` in new tab/window
-- Join same meeting with user ID: `test-user-b`
-- Meeting ID: `test-meeting-phase4`
+**Open Second Browser Window:**
+- Open `http://localhost:5173` in a **NEW browser window/tab**
+- This is **Window 2** (Client B - receiver)
+- Join the **SAME meeting** with user ID: `test-user-b`
+- Meeting ID: `test-meeting-phase4` (same as Client A)
 
 **Option B: Use Browser Console**
 ```javascript
