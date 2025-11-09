@@ -8,21 +8,31 @@ Phase 4 tests verify complete audio transmission from sender microphone through 
 
 ## Prerequisites
 
-1. **Backend Server Running:**
+1. **Backend Server Running (Terminal 1):**
    ```bash
    cd backend
    npm run dev
    ```
    Server should be running on `ws://localhost:8080`
+   ✅ You should see: `[SignalingServer] WebSocket server started on port 8080`
 
-2. **Frontend Application:**
-   - Frontend should be built and running
-   - Or use browser dev tools to test UserClient directly
+2. **Frontend Server Running (Terminal 2):**
+   ```bash
+   # In root directory (NOT in backend/)
+   npm run dev
+   ```
+   Frontend should be running on `http://localhost:5173` (or next available port)
+   ✅ You should see: `Local: http://localhost:5173`
 
 3. **Browser Setup:**
+   - Open `http://localhost:5173` in your browser
    - 2+ browser windows/tabs (or different browsers)
    - Microphone access granted
    - Speakers enabled
+
+**Important:** You need BOTH servers running:
+- **Backend** (port 8080) - WebSocket signaling server
+- **Frontend** (port 5173) - React application UI
 
 ---
 
@@ -33,25 +43,38 @@ Verify complete audio path from sender microphone to receiver speakers through s
 
 ### Steps
 
-#### 1. Start Backend Server
+#### 1. Start Both Servers
 
-**Important:** Make sure port 8080 is not already in use. If you get `EADDRINUSE` error:
-```bash
-# Find and kill process using port 8080
-lsof -ti:8080 | xargs kill
-```
+**You need TWO terminals running:**
 
-Then start the server:
+**Terminal 1: Backend Server**
 ```bash
 cd backend
 npm run dev
 ```
 
-**Note:** This runs the **backend WebSocket server** (different from root `npm run dev` which runs the frontend).
+**Important:** If you get `EADDRINUSE` error for port 8080:
+```bash
+# Find and kill process using port 8080
+lsof -ti:8080 | xargs kill
+```
 
-Verify server logs show:
-- `[SignalingServer] WebSocket server started on port 8080`
-- `[MediasoupManager] Initialization complete`
+Verify backend logs show:
+- ✅ `[SignalingServer] WebSocket server started on port 8080`
+- ✅ `[MediasoupManager] Initialization complete`
+
+**Terminal 2: Frontend Server**
+```bash
+# In root directory (NOT in backend/)
+npm run dev
+```
+
+Verify frontend logs show:
+- ✅ `Local: http://localhost:5173`
+
+**Now open your browser:**
+- Go to `http://localhost:5173`
+- You should see the React application UI
 
 #### 2. Open Client A (Sender) in Browser
 
