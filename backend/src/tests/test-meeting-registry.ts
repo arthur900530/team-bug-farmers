@@ -83,7 +83,7 @@ async function testMeetingRegistry() {
       throw new Error(`Expected 1 recipient, got ${recipientsExcluding1.length}`);
     }
     
-    if (recipientsExcluding1[0].userId !== 'user-2') {
+    if (recipientsExcluding1[0]?.userId !== 'user-2') {
       throw new Error('Excluded user still in list');
     }
     
