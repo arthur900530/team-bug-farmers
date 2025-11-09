@@ -49,6 +49,8 @@ export class SignalingServer {
   // Store RTP parameters and transport IDs from client offers (keyed by userId) for Producer creation
   private pendingRtpParameters: Map<string, any> = new Map();
   private pendingTransportIds: Map<string, { sendTransportId: string; recvTransportId: string }> = new Map();
+  // Store RTP capabilities per user (for Consumer creation)
+  private userRtpCapabilities: Map<string, any> = new Map();
 
   constructor(port: number, meetingRegistry: MeetingRegistry, mediasoupManager: MediasoupManager) {
     this.meetingRegistry = meetingRegistry;
@@ -250,6 +252,15 @@ export class SignalingServer {
         console.log(`[SignalingServer] Extracted RTP parameters for user ${userId}, will create Producer after DTLS connection`);
       }
       
+      // Extract RTP capabilities from client's SDP offer for Consumer creation
+      // From dev_specs/architecture.md line 65: "FWD == RTP: Selected tier only ==> UB"
+      // RTP capabilities describe what the client can receive (codecs, header extensions)
+      const rtpCapabilities = this.extractRtpCapabilitiesFromSdp(sdp);
+      if (rtpCapabilities) {
+        this.userRtpCapabilities.set(userId, rtpCapabilities);
+        console.log(`[SignalingServer] Extracted RTP capabilities for user ${userId}, will use for Consumer creation`);
+      }
+      
       // From dev_specs/public_interfaces.md lines 97-107: Answer message format
       const answerMessage: AnswerMessage = {
         type: 'answer',
@@ -320,6 +331,30 @@ export class SignalingServer {
           this.pendingRtpParameters.delete(userId);
           this.pendingTransportIds.delete(userId);
           console.log(`[SignalingServer] Producer created for user ${userId}`);
+          
+          // Create Consumers for all existing users to receive from this new Producer
+          // From dev_specs/architecture.md: SFU forwards audio to all receivers
+          const allParticipants = this.meetingRegistry.listRecipients(meetingId);
+          for (const receiver of allParticipants) {
+            if (receiver.userId !== userId) {
+              // Only create Consumer if receiver has RTP capabilities
+              const receiverRtpCapabilities = this.userRtpCapabilities.get(receiver.userId);
+              if (receiverRtpCapabilities) {
+                try {
+                  const consumer = await this.mediasoupManager.createConsumer(
+                    receiver.userId,
+                    userId,
+                    receiverRtpCapabilities
+                  );
+                  if (consumer) {
+                    console.log(`[SignalingServer] Consumer created for existing user ${receiver.userId} to receive from ${userId}`);
+                  }
+                } catch (error) {
+                  console.error(`[SignalingServer] Error creating consumer for existing user ${receiver.userId} → ${userId}:`, error);
+                }
+              }
+            }
+          }
         } catch (error) {
           console.error(`[SignalingServer] Failed to create Producer for user ${userId}:`, error);
           // Don't fail the entire connection if Producer creation fails
@@ -409,9 +444,10 @@ export class SignalingServer {
       const userId = clientConn.userId;
       const meetingId = clientConn.meetingId;
       
-      // Cleanup pending RTP parameters and transport IDs
+      // Cleanup pending RTP parameters, transport IDs, and RTP capabilities
       this.pendingRtpParameters.delete(userId);
       this.pendingTransportIds.delete(userId);
+      this.userRtpCapabilities.delete(userId);
       
       // Cleanup mediasoup resources
       // From dev_specs: Cleanup on user leave
@@ -835,12 +871,123 @@ export class SignalingServer {
   }
 
   /**
+   * Extract RTP capabilities from client SDP offer
+   * From dev_specs/architecture.md line 65: "FWD == RTP: Selected tier only ==> UB"
+   * 
+   * RTP capabilities describe what the client can receive (codecs, header extensions).
+   * Unlike RTP parameters, capabilities don't include encodings (SSRC, RID) since the
+   * receiver doesn't know what it will receive yet.
+   */
+  private extractRtpCapabilitiesFromSdp(sdp: string): any | null {
+    try {
+      // Extract audio media section
+      const audioSectionMatch = sdp.match(/m=audio\s+(\d+)\s+([^\r\n]+)\s+([^\r\n]+)/);
+      if (!audioSectionMatch || !audioSectionMatch[3]) {
+        console.warn('[SignalingServer] No audio media section found in SDP for capabilities');
+        return null;
+      }
+
+      // Extract codec information (rtpmap)
+      // From dev_specs/public_interfaces.md: Opus codec
+      const codecs: any[] = [];
+      const rtpmapRegex = /a=rtpmap:(\d+)\s+([^\s\/]+)\/(\d+)(?:\/(\d+))?/g;
+      let rtpmapMatch;
+      
+      while ((rtpmapMatch = rtpmapRegex.exec(sdp)) !== null) {
+        if (!rtpmapMatch[1] || !rtpmapMatch[2] || !rtpmapMatch[3]) {
+          continue;
+        }
+        
+        const payloadType = parseInt(rtpmapMatch[1], 10);
+        const mimeType = rtpmapMatch[2].toLowerCase();
+        const clockRate = parseInt(rtpmapMatch[3], 10);
+        const channels = rtpmapMatch[4] ? parseInt(rtpmapMatch[4], 10) : 1;
+        
+        // Include all audio codecs the client supports (not just Opus)
+        // This allows mediasoup to negotiate the best codec
+        if (mimeType === 'opus' || mimeType === 'pcmu' || mimeType === 'pcma') {
+          // Extract codec parameters (fmtp)
+          const fmtpMatch = sdp.match(new RegExp(`a=fmtp:${payloadType}\\s+([^\\r\\n]+)`));
+          const parameters: any = {};
+          
+          if (fmtpMatch && fmtpMatch[1]) {
+            // Parse fmtp parameters
+            fmtpMatch[1].split(';').forEach(param => {
+              const [key, value] = param.split('=');
+              if (key && value) {
+                parameters[key.trim()] = value.trim();
+              }
+            });
+          }
+          
+          // For Opus, ensure in-band FEC is enabled
+          if (mimeType === 'opus' && !parameters.useinbandfec) {
+            parameters.useinbandfec = '1';
+          }
+          
+          codecs.push({
+            kind: 'audio',
+            mimeType: `audio/${mimeType}`,
+            preferredPayloadType: payloadType,
+            clockRate: clockRate,
+            channels: channels,
+            parameters: parameters
+          });
+        }
+      }
+      
+      if (codecs.length === 0) {
+        console.warn('[SignalingServer] No supported audio codecs found in SDP for capabilities');
+        return null;
+      }
+
+      // Extract header extensions (if present)
+      // WebRTC uses header extensions for things like audio level, abs-send-time, etc.
+      const headerExtensions: any[] = [];
+      const extmapRegex = /a=extmap:(\d+)\s+([^\s]+)(?:\s+([^\r\n]+))?/g;
+      let extmapMatch;
+      
+      while ((extmapMatch = extmapRegex.exec(sdp)) !== null) {
+        if (extmapMatch[1] && extmapMatch[2]) {
+          headerExtensions.push({
+            uri: extmapMatch[2],
+            id: parseInt(extmapMatch[1], 10),
+            encrypt: false
+          });
+        }
+      }
+
+      // Build RTP capabilities in mediasoup format
+      const rtpCapabilities = {
+        codecs: codecs,
+        headerExtensions: headerExtensions,
+        fecMechanisms: [] // FEC is handled by Opus in-band FEC
+      };
+
+      console.log(`[SignalingServer] Extracted RTP capabilities: ${codecs.length} codec(s), ${headerExtensions.length} header extension(s)`);
+      return rtpCapabilities;
+      
+    } catch (error) {
+      console.error('[SignalingServer] Error extracting RTP capabilities from SDP:', error);
+      return null;
+    }
+  }
+
+  /**
    * Create Consumers for a user to receive from other participants
    * From dev_specs/architecture.md line 65: "FWD == RTP: Selected tier only ==> UB"
+   * From dev_specs/flow_charts.md line 95: "RtpReceiver.onRtp - EncodedFrame"
    * 
    * When a user joins, create consumers to receive audio from all other participants
    */
   private async createConsumersForUser(receiverUserId: string, meetingId: string): Promise<void> {
+    // Get receiver's RTP capabilities
+    const receiverRtpCapabilities = this.userRtpCapabilities.get(receiverUserId);
+    if (!receiverRtpCapabilities) {
+      console.warn(`[SignalingServer] No RTP capabilities found for user ${receiverUserId}, cannot create Consumers`);
+      return;
+    }
+
     // Get all other participants in the meeting
     const otherParticipants = this.meetingRegistry.listRecipients(meetingId, receiverUserId);
     
@@ -849,24 +996,34 @@ export class SignalingServer {
       return;
     }
 
+    console.log(`[SignalingServer] Creating consumers for ${receiverUserId} to receive from ${otherParticipants.length} participants`);
+
     // For each sender, create a consumer
-    // Note: We need the receiver's RTP capabilities to create consumers
-    // This will be handled when the client sends its RTP capabilities
-    // For now, we'll log what we would do
-    
-    console.log(`[SignalingServer] Would create consumers for ${receiverUserId} to receive from ${otherParticipants.length} participants`);
-    
-    // In production, we'd do:
-    // for (const sender of otherParticipants) {
-    //   const producer = this.mediasoupManager.getProducer(sender.userId);
-    //   if (producer) {
-    //     const consumer = await this.mediasoupManager.createConsumer(
-    //       receiverUserId,
-    //       sender.userId,
-    //       receiverRtpCapabilities
-    //     );
-    //   }
-    // }
+    // From dev_specs/architecture.md: SFU forwards selected tier to receiver
+    for (const sender of otherParticipants) {
+      const producer = this.mediasoupManager.getProducer(sender.userId);
+      if (producer) {
+        try {
+          const consumer = await this.mediasoupManager.createConsumer(
+            receiverUserId,
+            sender.userId,
+            receiverRtpCapabilities
+          );
+          
+          if (consumer) {
+            console.log(`[SignalingServer] Consumer created: ${sender.userId} → ${receiverUserId} (Consumer ID: ${consumer.id})`);
+            // Note: Consumer RTP parameters would be sent to client via WebSocket
+            // For now, mediasoup handles RTP forwarding automatically
+          } else {
+            console.warn(`[SignalingServer] Failed to create consumer for ${sender.userId} → ${receiverUserId}`);
+          }
+        } catch (error) {
+          console.error(`[SignalingServer] Error creating consumer ${sender.userId} → ${receiverUserId}:`, error);
+        }
+      } else {
+        console.log(`[SignalingServer] No producer found for sender ${sender.userId}, skipping consumer creation`);
+      }
+    }
   }
 
   /**
