@@ -46,6 +46,9 @@ export class SignalingServer {
   private clients: Map<WebSocket, ClientConnection> = new Map();
   private meetingRegistry: MeetingRegistry;
   private mediasoupManager: MediasoupManager;
+  // Store RTP parameters and transport IDs from client offers (keyed by userId) for Producer creation
+  private pendingRtpParameters: Map<string, any> = new Map();
+  private pendingTransportIds: Map<string, { sendTransportId: string; recvTransportId: string }> = new Map();
 
   constructor(port: number, meetingRegistry: MeetingRegistry, mediasoupManager: MediasoupManager) {
     this.meetingRegistry = meetingRegistry;
@@ -231,18 +234,21 @@ export class SignalingServer {
       // From dev_specs/public_interfaces.md line 144: "Server (via SFU) returns answer"
       // Create mediasoup transports for this user
       const transports = await this.mediasoupManager.createTransports(userId);
-
-      // Parse client's SDP offer to extract RTP parameters
-      // Note: In a real implementation, we'd parse the SDP to get RTP capabilities
-      // For now, we'll create the answer with mediasoup transport parameters
       
-      // Connect send transport with DTLS parameters from client offer
-      // The client's offer contains DTLS fingerprint, we need to extract it
-      // For mediasoup, we'll handle DTLS connection when client sends answer confirmation
+      // Store transport IDs for use in handleAnswer
+      this.pendingTransportIds.set(userId, {
+        sendTransportId: transports.sendTransport.id,
+        recvTransportId: transports.recvTransport.id
+      });
 
-      // Generate mediasoup answer SDP
-      // This is a simplified version - in production, we'd properly construct SDP
-      // For mediasoup, the answer includes transport ICE parameters and DTLS parameters
+      // Extract RTP parameters from client's SDP offer for Producer creation
+      // From dev_specs/flow_charts.md line 73: "RTP packets → StreamForwarder"
+      // We'll create Producer after DTLS connection in handleAnswer
+      const rtpParameters = this.extractRtpParametersFromSdp(sdp);
+      if (rtpParameters) {
+        this.pendingRtpParameters.set(userId, rtpParameters);
+        console.log(`[SignalingServer] Extracted RTP parameters for user ${userId}, will create Producer after DTLS connection`);
+      }
       
       // From dev_specs/public_interfaces.md lines 97-107: Answer message format
       const answerMessage: AnswerMessage = {
@@ -304,8 +310,29 @@ export class SignalingServer {
 
       // Create Producer for this user (if they're sending audio)
       // From dev_specs/flow_charts.md line 73: "RTP packets → StreamForwarder"
-      // The Producer will be created when client starts sending RTP
-      // For now, we'll wait for the client to send RTP parameters
+      // Producer receives RTP from client and forwards to StreamForwarder
+      const rtpParameters = this.pendingRtpParameters.get(userId);
+      const transportIds = this.pendingTransportIds.get(userId);
+      
+      if (rtpParameters && transportIds) {
+        try {
+          await this.mediasoupManager.createProducer(userId, transportIds.sendTransportId, rtpParameters);
+          this.pendingRtpParameters.delete(userId);
+          this.pendingTransportIds.delete(userId);
+          console.log(`[SignalingServer] Producer created for user ${userId}`);
+        } catch (error) {
+          console.error(`[SignalingServer] Failed to create Producer for user ${userId}:`, error);
+          // Don't fail the entire connection if Producer creation fails
+          // The client can still connect, but audio won't flow until Producer is created
+        }
+      } else {
+        if (!rtpParameters) {
+          console.warn(`[SignalingServer] No RTP parameters found for user ${userId}, Producer not created`);
+        }
+        if (!transportIds) {
+          console.warn(`[SignalingServer] No transport IDs found for user ${userId}, Producer not created`);
+        }
+      }
 
       // Create Consumers for this user (to receive from other participants)
       // From dev_specs/architecture.md line 65: "FWD == RTP: Selected tier only ==> UB"
@@ -677,6 +704,130 @@ export class SignalingServer {
     }
     
     return null;
+  }
+
+  /**
+   * Extract RTP parameters from client SDP offer
+   * From dev_specs/public_interfaces.md: Opus codec, payload type 111, 48kHz, 2 channels
+   * From dev_specs/public_interfaces.md: 3 simulcast tiers (16/32/64 kbps)
+   * 
+   * This extracts RTP parameters in mediasoup format from standard WebRTC SDP offer.
+   */
+  private extractRtpParametersFromSdp(sdp: string): any | null {
+    try {
+      // Extract audio media section
+      const audioSectionMatch = sdp.match(/m=audio\s+(\d+)\s+([^\r\n]+)\s+([^\r\n]+)/);
+      if (!audioSectionMatch || !audioSectionMatch[3]) {
+        console.warn('[SignalingServer] No audio media section found in SDP');
+        return null;
+      }
+
+      const payloadTypes = audioSectionMatch[3].split(' ').map(pt => parseInt(pt, 10)).filter(pt => !isNaN(pt));
+      
+      // Extract codec information (rtpmap)
+      // From dev_specs/public_interfaces.md line 220: Opus payload type 111
+      // From dev_specs/public_interfaces.md: Opus, 48kHz, 2 channels
+      const codecs: any[] = [];
+      const rtpmapRegex = /a=rtpmap:(\d+)\s+([^\s\/]+)\/(\d+)(?:\/(\d+))?/g;
+      let rtpmapMatch;
+      
+      while ((rtpmapMatch = rtpmapRegex.exec(sdp)) !== null) {
+        if (!rtpmapMatch[1] || !rtpmapMatch[2] || !rtpmapMatch[3]) {
+          continue;
+        }
+        
+        const payloadType = parseInt(rtpmapMatch[1], 10);
+        const mimeType = rtpmapMatch[2].toLowerCase();
+        const clockRate = parseInt(rtpmapMatch[3], 10);
+        const channels = rtpmapMatch[4] ? parseInt(rtpmapMatch[4], 10) : 1;
+        
+        // Look for Opus codec (any payload type - client may use different PT than our answer)
+        // From dev_specs/public_interfaces.md: Opus codec
+        if (mimeType === 'opus') {
+          // Extract codec parameters (fmtp)
+          const fmtpMatch = sdp.match(new RegExp(`a=fmtp:${payloadType}\\s+([^\\r\\n]+)`));
+          const parameters: any = {};
+          
+          if (fmtpMatch && fmtpMatch[1]) {
+            // Parse fmtp parameters (e.g., "minptime=10;useinbandfec=1")
+            fmtpMatch[1].split(';').forEach(param => {
+              const [key, value] = param.split('=');
+              if (key && value) {
+                parameters[key.trim()] = value.trim();
+              }
+            });
+          }
+          
+          // From dev_specs/public_interfaces.md: Opus with in-band FEC
+          if (!parameters.useinbandfec) {
+            parameters.useinbandfec = '1';
+          }
+          
+          codecs.push({
+            mimeType: 'audio/opus',
+            payloadType: payloadType,
+            clockRate: clockRate,
+            channels: channels,
+            parameters: parameters
+          });
+        }
+      }
+      
+      if (codecs.length === 0) {
+        console.warn('[SignalingServer] No Opus codec found in SDP');
+        return null;
+      }
+
+      // Extract SSRC (if present)
+      const ssrcMatch = sdp.match(/a=ssrc:(\d+)/);
+      const ssrc = ssrcMatch && ssrcMatch[1] ? parseInt(ssrcMatch[1], 10) : undefined;
+
+      // Extract simulcast information (if present)
+      // From dev_specs/public_interfaces.md: 3 simulcast tiers
+      const simulcastMatch = sdp.match(/a=simulcast:send\s+([^\r\n]+)/);
+      const encodings: any[] = [];
+      
+      if (simulcastMatch && simulcastMatch[1]) {
+        // Parse simulcast RIDs (e.g., "rid:high send;rid:mid send;rid:low send")
+        const rids = simulcastMatch[1].split(';').map(rid => {
+          const match = rid.match(/rid:([^\s]+)/);
+          return match && match[1] ? match[1] : null;
+        }).filter((rid): rid is string => rid !== null);
+        
+        // Create encodings for each simulcast layer
+        // From dev_specs/public_interfaces.md: LOW (16 kbps), MEDIUM (32 kbps), HIGH (64 kbps)
+        rids.forEach((rid, index) => {
+          encodings.push({
+            rid: rid,
+            ssrc: ssrc ? ssrc + index : undefined,
+            // Simulcast layers will be selected by mediasoup based on tier
+          });
+        });
+      } else {
+        // No simulcast, single encoding
+        encodings.push({
+          ssrc: ssrc
+        });
+      }
+
+      // Build RTP parameters in mediasoup format
+      const rtpParameters = {
+        codecs: codecs,
+        headerExtensions: [], // WebRTC header extensions (not critical for basic audio)
+        encodings: encodings,
+        rtcp: {
+          cname: ssrc ? `user-${ssrc}` : 'user',
+          reducedSize: true // From dev_specs/public_interfaces.md: RTCP reports
+        }
+      };
+
+      console.log(`[SignalingServer] Extracted RTP parameters: ${codecs.length} codec(s), ${encodings.length} encoding(s)`);
+      return rtpParameters;
+      
+    } catch (error) {
+      console.error('[SignalingServer] Error extracting RTP parameters from SDP:', error);
+      return null;
+    }
   }
 
   /**
