@@ -46,9 +46,9 @@ export class SignalingServer {
   private clients: Map<WebSocket, ClientConnection> = new Map();
   private meetingRegistry: MeetingRegistry;
   private mediasoupManager: MediasoupManager;
-  // Store RTP parameters and transport IDs from client offers (keyed by userId) for Producer creation
+  // Store RTP parameters and transport ID from client offers (keyed by userId) for Producer creation
   private pendingRtpParameters: Map<string, any> = new Map();
-  private pendingTransportIds: Map<string, { sendTransportId: string; recvTransportId: string }> = new Map();
+  private pendingTransportIds: Map<string, string> = new Map();
   // Store RTP capabilities per user (for Consumer creation)
   private userRtpCapabilities: Map<string, any> = new Map();
 
@@ -234,14 +234,11 @@ export class SignalingServer {
       console.log(`[SignalingServer] Handling offer from user ${userId} in meeting ${meetingId}`);
 
       // From dev_specs/public_interfaces.md line 144: "Server (via SFU) returns answer"
-      // Create mediasoup transports for this user
-      const transports = await this.mediasoupManager.createTransports(userId);
+      // Create mediasoup transport for this user (single transport for both send and receive)
+      const transport = await this.mediasoupManager.createTransport(userId);
       
-      // Store transport IDs for use in handleAnswer
-      this.pendingTransportIds.set(userId, {
-        sendTransportId: transports.sendTransport.id,
-        recvTransportId: transports.recvTransport.id
-      });
+      // Store transport ID for use in handleAnswer
+      this.pendingTransportIds.set(userId, transport.id);
 
       // Extract RTP parameters from client's SDP offer for Producer creation
       // From dev_specs/flow_charts.md line 73: "RTP packets → StreamForwarder"
@@ -265,7 +262,7 @@ export class SignalingServer {
       const answerMessage: AnswerMessage = {
         type: 'answer',
         meetingId,
-        sdp: this.createMediasoupAnswerSdp(transports, sdp)
+        sdp: this.createMediasoupAnswerSdp(transport, sdp)
       };
 
       // Send answer back to client
@@ -306,28 +303,23 @@ export class SignalingServer {
       console.log(`[SignalingServer] Handling answer from user ${userId} in meeting ${meetingId}`);
 
       // Parse client's answer SDP to extract DTLS parameters
-      // Connect mediasoup transports
+      // Connect mediasoup transport (single transport for both send and receive)
       const dtlsParameters = this.extractDtlsParameters(sdp);
       
       if (dtlsParameters) {
-        // Connect send transport (for Producer)
-        await this.mediasoupManager.connectTransport(userId, 'send', dtlsParameters);
-        
-        // Connect recv transport (for Consumer)
-        await this.mediasoupManager.connectTransport(userId, 'recv', dtlsParameters);
-        
-        console.log(`[SignalingServer] Connected mediasoup transports for user ${userId}`);
+        await this.mediasoupManager.connectTransport(userId, dtlsParameters);
+        console.log(`[SignalingServer] Connected mediasoup transport for user ${userId}`);
       }
 
       // Create Producer for this user (if they're sending audio)
       // From dev_specs/flow_charts.md line 73: "RTP packets → StreamForwarder"
       // Producer receives RTP from client and forwards to StreamForwarder
       const rtpParameters = this.pendingRtpParameters.get(userId);
-      const transportIds = this.pendingTransportIds.get(userId);
+      const transportId = this.pendingTransportIds.get(userId);
       
-      if (rtpParameters && transportIds) {
+      if (rtpParameters && transportId) {
         try {
-          await this.mediasoupManager.createProducer(userId, transportIds.sendTransportId, rtpParameters);
+          await this.mediasoupManager.createProducer(userId, transportId, rtpParameters);
           this.pendingRtpParameters.delete(userId);
           this.pendingTransportIds.delete(userId);
           console.log(`[SignalingServer] Producer created for user ${userId}`);
@@ -364,8 +356,8 @@ export class SignalingServer {
         if (!rtpParameters) {
           console.warn(`[SignalingServer] No RTP parameters found for user ${userId}, Producer not created`);
         }
-        if (!transportIds) {
-          console.warn(`[SignalingServer] No transport IDs found for user ${userId}, Producer not created`);
+        if (!transportId) {
+          console.warn(`[SignalingServer] No transport ID found for user ${userId}, Producer not created`);
         }
       }
 
@@ -622,13 +614,14 @@ export class SignalingServer {
    * From dev_specs/tech_stack.md line 40: "SDP – Capability negotiation and session description"
    * 
    * This creates a proper WebRTC SDP answer that standard RTCPeerConnection can understand.
-   * Uses mediasoup send transport parameters for the answer (client sends to server).
-   * Receiving will be handled separately via mediasoup consumers.
+   * Uses single mediasoup transport parameters for bidirectional communication (client sends and receives on same connection).
    */
   private createMediasoupAnswerSdp(
-    transports: {
-      sendTransport: { id: string; iceParameters: any; iceCandidates: any; dtlsParameters: any };
-      recvTransport: { id: string; iceParameters: any; iceCandidates: any; dtlsParameters: any };
+    transport: {
+      id: string;
+      iceParameters: any;
+      iceCandidates: any;
+      dtlsParameters: any;
     },
     clientOfferSdp: string
   ): string {
@@ -643,9 +636,8 @@ export class SignalingServer {
     const mediaPort = mediaMatch && mediaMatch[1] ? parseInt(mediaMatch[1], 10) : 9;
     const mediaProtocol = mediaMatch && mediaMatch[2] ? mediaMatch[2] : 'UDP/TLS/RTP/SAVPF';
     
-    // Use send transport for the answer (client sends to server)
-    // From dev_specs: Client sends RTP to server via Producer
-    const transport = transports.sendTransport;
+    // Use single transport for bidirectional communication
+    // From dev_specs: Client sends and receives RTP on same connection
     const iceParams = transport.iceParameters;
     const dtlsParams = transport.dtlsParameters;
     

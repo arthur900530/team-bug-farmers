@@ -41,8 +41,9 @@ export class MediasoupManager {
   private router: Router | null = null;
   
   // Track transports per user
-  // From dev_specs: Each client needs send and recv transports
-  private transports: Map<string, { send: WebRtcTransport; recv: WebRtcTransport }> = new Map();
+  // Using single transport for both send and receive (matches standard WebRTC single RTCPeerConnection)
+  // From dev_specs/tech_stack.md: WebRTC (RTP/RTCP) for transport
+  private transports: Map<string, WebRtcTransport> = new Map();
   
   // Track producers per user (audio sender)
   private producers: Map<string, Producer> = new Map();
@@ -115,32 +116,24 @@ export class MediasoupManager {
   }
 
   /**
-   * Create WebRTC transports for a client
+   * Create WebRTC transport for a client
    * From dev_specs/public_interfaces.md lines 139-146: Signaling flow with SDP
+   * From dev_specs/tech_stack.md: WebRTC (RTP/RTCP) for transport
    * 
-   * Each client needs two transports:
-   * - Send transport: for sending RTP (Producer)
-   * - Recv transport: for receiving RTP (Consumer)
+   * Using single transport for both send and receive to match standard WebRTC
+   * single RTCPeerConnection architecture (client sends and receives on same connection)
    */
-  async createTransports(userId: string): Promise<{
-    sendTransport: {
-      id: string;
-      iceParameters: any;
-      iceCandidates: any;
-      dtlsParameters: any;
-    };
-    recvTransport: {
-      id: string;
-      iceParameters: any;
-      iceCandidates: any;
-      dtlsParameters: any;
-    };
+  async createTransport(userId: string): Promise<{
+    id: string;
+    iceParameters: any;
+    iceCandidates: any;
+    dtlsParameters: any;
   }> {
     if (!this.router) {
       throw new Error('Router not initialized');
     }
 
-    console.log(`[MediasoupManager] Creating transports for user ${userId}`);
+    console.log(`[MediasoupManager] Creating transport for user ${userId}`);
 
     // Transport options
     // From dev_specs: ICE, DTLS for secure RTP
@@ -156,55 +149,40 @@ export class MediasoupManager {
       preferUdp: true,
     };
 
-    // Create send transport (for Producer)
-    const sendTransport = await this.router.createWebRtcTransport(transportOptions);
-    
-    // Create recv transport (for Consumer)
-    const recvTransport = await this.router.createWebRtcTransport(transportOptions);
+    // Create single transport for both send and receive
+    const transport = await this.router.createWebRtcTransport(transportOptions);
 
-    // Store transports
-    this.transports.set(userId, { send: sendTransport, recv: recvTransport });
+    // Store transport
+    this.transports.set(userId, transport);
 
-    console.log(`[MediasoupManager] Transports created for user ${userId}`);
-    console.log(`  - Send transport: ${sendTransport.id}`);
-    console.log(`  - Recv transport: ${recvTransport.id}`);
+    console.log(`[MediasoupManager] Transport created for user ${userId} (ID: ${transport.id})`);
 
     // Return transport parameters for client SDP
     return {
-      sendTransport: {
-        id: sendTransport.id,
-        iceParameters: sendTransport.iceParameters,
-        iceCandidates: sendTransport.iceCandidates,
-        dtlsParameters: sendTransport.dtlsParameters,
-      },
-      recvTransport: {
-        id: recvTransport.id,
-        iceParameters: recvTransport.iceParameters,
-        iceCandidates: recvTransport.iceCandidates,
-        dtlsParameters: recvTransport.dtlsParameters,
-      },
+      id: transport.id,
+      iceParameters: transport.iceParameters,
+      iceCandidates: transport.iceCandidates,
+      dtlsParameters: transport.dtlsParameters,
     };
   }
 
   /**
    * Connect transport with DTLS parameters from client
    * Called when client sends DTLS parameters
+   * From dev_specs/tech_stack.md: DTLS for secure RTP
    */
   async connectTransport(
     userId: string,
-    transportType: 'send' | 'recv',
     dtlsParameters: any
   ): Promise<void> {
-    const transports = this.transports.get(userId);
-    if (!transports) {
-      throw new Error(`No transports found for user ${userId}`);
+    const transport = this.transports.get(userId);
+    if (!transport) {
+      throw new Error(`No transport found for user ${userId}`);
     }
-
-    const transport = transportType === 'send' ? transports.send : transports.recv;
     
     await transport.connect({ dtlsParameters });
     
-    console.log(`[MediasoupManager] ${transportType} transport connected for user ${userId}`);
+    console.log(`[MediasoupManager] Transport connected for user ${userId}`);
   }
 
   /**
@@ -217,9 +195,9 @@ export class MediasoupManager {
     transportId: string,
     rtpParameters: any
   ): Promise<{ id: string }> {
-    const transports = this.transports.get(userId);
-    if (!transports || transports.send.id !== transportId) {
-      throw new Error(`Send transport not found for user ${userId}`);
+    const transport = this.transports.get(userId);
+    if (!transport || transport.id !== transportId) {
+      throw new Error(`Transport not found for user ${userId}`);
     }
 
     console.log(`[MediasoupManager] Creating producer for user ${userId}`);
@@ -227,7 +205,7 @@ export class MediasoupManager {
     // Create producer with simulcast
     // From dev_specs/public_interfaces.md lines 197-199:
     // "3 simulcast tiers (LOW/MEDIUM/HIGH) - Opus frames at 16/32/64 kbps"
-    const producer = await transports.send.produce({
+    const producer = await transport.produce({
       kind: 'audio',
       rtpParameters,
       // Note: Simulcast for audio is configured on client side via SDP
@@ -256,9 +234,9 @@ export class MediasoupManager {
     kind: string;
     rtpParameters: any;
   } | null> {
-    const receiverTransports = this.transports.get(receiverUserId);
-    if (!receiverTransports) {
-      throw new Error(`Recv transport not found for user ${receiverUserId}`);
+    const receiverTransport = this.transports.get(receiverUserId);
+    if (!receiverTransport) {
+      throw new Error(`Transport not found for user ${receiverUserId}`);
     }
 
     const producer = this.producers.get(senderUserId);
@@ -275,8 +253,8 @@ export class MediasoupManager {
 
     console.log(`[MediasoupManager] Creating consumer: ${senderUserId} → ${receiverUserId}`);
 
-    // Create consumer
-    const consumer = await receiverTransports.recv.consume({
+    // Create consumer on the same transport (bidirectional)
+    const consumer = await receiverTransport.consume({
       producerId: producer.id,
       rtpCapabilities,
       paused: false, // Start receiving immediately
@@ -320,7 +298,7 @@ export class MediasoupManager {
   }
 
   /**
-   * Cleanup transports and producers for a user
+   * Cleanup transport and producers for a user
    * Called when user leaves meeting
    */
   async cleanupUser(userId: string): Promise<void> {
@@ -334,13 +312,12 @@ export class MediasoupManager {
       console.log(`[MediasoupManager] Producer closed for user ${userId}`);
     }
 
-    // Close transports
-    const transports = this.transports.get(userId);
-    if (transports) {
-      transports.send.close();
-      transports.recv.close();
+    // Close transport
+    const transport = this.transports.get(userId);
+    if (transport) {
+      transport.close();
       this.transports.delete(userId);
-      console.log(`[MediasoupManager] Transports closed for user ${userId}`);
+      console.log(`[MediasoupManager] Transport closed for user ${userId}`);
     }
 
     // Close consumers for this user
@@ -372,9 +349,8 @@ export class MediasoupManager {
     this.producers.clear();
 
     // Close all transports
-    for (const transports of this.transports.values()) {
-      transports.send.close();
-      transports.recv.close();
+    for (const transport of this.transports.values()) {
+      transport.close();
     }
     this.transports.clear();
 
