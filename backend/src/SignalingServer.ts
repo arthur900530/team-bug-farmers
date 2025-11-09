@@ -409,6 +409,10 @@ export class SignalingServer {
       const userId = clientConn.userId;
       const meetingId = clientConn.meetingId;
       
+      // Cleanup pending RTP parameters and transport IDs
+      this.pendingRtpParameters.delete(userId);
+      this.pendingTransportIds.delete(userId);
+      
       // Cleanup mediasoup resources
       // From dev_specs: Cleanup on user leave
       try {
