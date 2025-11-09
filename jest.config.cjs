@@ -22,6 +22,7 @@ module.exports = {
   moduleDirectories: ['node_modules', 'src'],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
+    'backend/src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
     '!src/main.tsx',
     '!src/vite-env.d.ts',
