@@ -94,6 +94,7 @@ export function MeetingView({
           <ParticipantList 
             participants={participants} 
             currentUserId={currentUserId}
+            onClose={() => setShowParticipants(false)}
           />
         </div>
       )}

@@ -1,14 +1,15 @@
 import React from 'react';
-import { Mic, MicOff, User, Signal } from 'lucide-react';
+import { Mic, MicOff, User, Signal, X } from 'lucide-react';
 import type { UserSession } from '../../types';
 
 interface ParticipantListProps {
   participants: UserSession[];
   currentUserId?: string;
   className?: string;
+  onClose?: () => void;
 }
 
-export function ParticipantList({ participants, currentUserId, className = '' }: ParticipantListProps) {
+export function ParticipantList({ participants, currentUserId, className = '', onClose }: ParticipantListProps) {
   const getConnectionStatusColor = (state: UserSession['connectionState']) => {
     switch (state) {
       case 'Connected':
@@ -40,6 +41,15 @@ export function ParticipantList({ participants, currentUserId, className = '' }:
         <h3 className="text-white font-medium">
           Participants ({participants.length})
         </h3>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-700"
+            aria-label="Close participant list"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div className="space-y-2 max-h-[300px] overflow-y-auto">
