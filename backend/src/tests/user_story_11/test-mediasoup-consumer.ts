@@ -3,7 +3,7 @@
  * Phase 2.1.4: Verify Consumer can be created to forward RTP
  */
 
-import { MediasoupManager } from '../MediasoupManager';
+import { MediasoupManager } from '../../MediasoupManager';
 
 async function testConsumerCreation() {
   console.log('[Test] Starting MediasoupManager Consumer Creation test...');

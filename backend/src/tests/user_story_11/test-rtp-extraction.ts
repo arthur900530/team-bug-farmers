@@ -11,9 +11,12 @@
 // We need to test the private method, so we'll create a test version
 // or test through SignalingServer's public interface
 
-import { SignalingServer } from '../SignalingServer';
-import { MeetingRegistry } from '../MeetingRegistry';
-import { MediasoupManager } from '../MediasoupManager';
+import { SignalingServer } from '../../SignalingServer';
+import { MeetingRegistry } from '../../MeetingRegistry';
+import { MediasoupManager } from '../../MediasoupManager';
+import { StreamForwarder } from '../../StreamForwarder';
+import { RtcpCollector } from '../../RtcpCollector';
+import { QualityController } from '../../QualityController';
 import WebSocket from 'ws';
 
 async function testRtpExtraction() {
@@ -25,9 +28,21 @@ async function testRtpExtraction() {
     const mediasoupManager = new MediasoupManager();
     await mediasoupManager.initialize();
     
+    // Create User Story 8 components (required for SignalingServer constructor)
+    const streamForwarder = new StreamForwarder(meetingRegistry, mediasoupManager);
+    const rtcpCollector = new RtcpCollector(meetingRegistry);
+    const qualityController = new QualityController(rtcpCollector, streamForwarder, meetingRegistry);
+    
     // Create a SignalingServer instance (we'll use it to test extraction)
     // Use type casting to access private methods for testing
-    const signalingServer = new SignalingServer(8081, meetingRegistry, mediasoupManager) as any;
+    const signalingServer = new SignalingServer(
+      8081,
+      meetingRegistry,
+      mediasoupManager,
+      streamForwarder,
+      rtcpCollector,
+      qualityController
+    ) as any;
     
     // Test 1: Valid SDP with Opus codec
     console.log('\n[Test] Test 1: Valid SDP with Opus codec...');

@@ -215,6 +215,34 @@ export class AudioPlayer implements AudioProcessor {
   }
 
   /**
+   * Read a PCM frame from the decoded audio stream
+   * From dev_specs/APIs.md: Similar to AudioCapture.readFrame() but for decoded audio
+   * Used for User Story 3: Receiver fingerprint computation
+   * 
+   * Returns PCM audio data from the decoded audio track
+   * From dev_specs/data_schemas.md: PCMFrame structure
+   */
+  readFrame(): PCMFrame {
+    if (!this.analyserNode || !this.audioContext) {
+      throw new Error('[AudioPlayer] Cannot read frame: playback not started');
+    }
+
+    // Get time domain data (PCM samples) from decoded audio
+    const bufferLength = this.analyserNode.frequencyBinCount;
+    const dataArray = new Float32Array(bufferLength);
+    this.analyserNode.getFloatTimeDomainData(dataArray);
+
+    // From dev_specs/data_schemas.md: PCMFrame structure
+    const pcmFrame: PCMFrame = {
+      samples: dataArray,
+      sampleRate: this.audioContext.sampleRate,
+      channels: 1 // Mono audio
+    };
+
+    return pcmFrame;
+  }
+
+  /**
    * Set volume level
    * @param volume - Volume between 0.0 and 1.0
    */

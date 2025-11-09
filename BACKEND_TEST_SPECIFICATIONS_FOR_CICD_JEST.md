@@ -59,12 +59,9 @@ StreamForwarder routes audio streams and manages quality tier selection for meet
 1. `constructor(meetingRegistry, mediasoupManager)`
 2. `forward(meetingId, tier, frames)`
 3. `selectTierFor(userId)`
-4. `setTier(meetingId, tier)`
-5. `setTierForUser(userId, tier)`
-6. `getTier(meetingId)`
-7. `findMeetingForUser(userId)` (private, but testable via other methods)
-8. `cleanupMeeting(meetingId)`
-9. `getStats()`
+4. `setTier(meetingId, tier)` - **CRITICAL: Used by QualityController (User Story 8)**
+5. `findMeetingForUser(userId)` (private, but testable via other methods)
+6. `cleanupMeeting(meetingId)` - **Should be called when meeting ends (per flow_charts.md line 228)**
 
 ### Test Cases
 
@@ -83,20 +80,12 @@ StreamForwarder routes audio streams and manages quality tier selection for meet
 | 11 | `setTier` | Updates tier from MEDIUM to HIGH | `meetingId='meeting1'` (currentTier='MEDIUM'), `tier='HIGH'` | Meeting tier updated to 'HIGH'; console logs "Set tier for meeting meeting1: MEDIUM → HIGH (layer 2)" |
 | 12 | `setTier` | Skips update when tier unchanged | `meetingId='meeting1'` (currentTier='HIGH'), `tier='HIGH'` | No update performed; console logs "Tier for meeting meeting1 already set to HIGH"; `meetingRegistry.updateQualityTier` not called |
 | 13 | `setTier` | Logs consumer update count | `meetingId='meeting1'` (with 3 users), `tier='LOW'` | Console logs "Updating 3 consumers to tier LOW (layer 0)" |
-| 14 | `setTierForUser` | Sets tier for specific user | `userId='user1'`, `tier='LOW'` | User tier set to 'LOW'; console logs "Set tier for user user1: none → LOW" |
-| 15 | `setTierForUser` | Updates user tier from LOW to HIGH | `userId='user1'` (currentTier='LOW'), `tier='HIGH'` | User tier updated to 'HIGH'; console logs "Set tier for user user1: LOW → HIGH" |
-| 16 | `setTierForUser` | Skips update when user tier unchanged | `userId='user1'` (currentTier='MEDIUM'), `tier='MEDIUM'` | No update performed; no console log; function returns immediately |
-| 17 | `getTier` | Returns current tier for meeting | `meetingId='meeting1'` (tier set to 'LOW') | Returns `'LOW'` |
-| 18 | `getTier` | Returns HIGH as default for new meeting | `meetingId='meeting1'` (no tier set yet) | Returns `'HIGH'` (default) |
-| 19 | `findMeetingForUser` | Finds meeting for user (via selectTierFor) | `userId='user1'` (in 'meeting1') | `selectTierFor('user1')` returns the meeting's tier, confirming user was found |
-| 20 | `findMeetingForUser` | Returns null for non-existent user | `userId='nonexistent'` | `selectTierFor('nonexistent')` returns 'HIGH' (default), indicating user not found in any meeting |
-| 21 | `cleanupMeeting` | Removes meeting tier | `meetingId='meeting1'` (tier='LOW') | Meeting tier removed from internal map; `getTier('meeting1')` returns 'HIGH' (default); console logs "Cleaned up meeting meeting1" |
-| 22 | `cleanupMeeting` | Removes user tiers for meeting users | `meetingId='meeting1'` (with 'user1' and 'user2' having user tiers) | User tiers for user1 and user2 removed from internal map |
-| 23 | `cleanupMeeting` | Handles cleanup for non-existent meeting | `meetingId='nonexistent'` | No error thrown; console logs "Cleaned up meeting nonexistent" |
-| 24 | `getStats` | Returns stats with active meetings | After setting tiers for 2 meetings ('meeting1'='LOW', 'meeting2'='HIGH') | Returns object: `{activeMeetings: 2, meetings: [{meetingId:'meeting1', tier:'LOW'}, {meetingId:'meeting2', tier:'HIGH'}], userTiers: 0}` |
-| 25 | `getStats` | Includes user tier count | After setting 3 user-specific tiers | Returns object with `userTiers: 3` |
-| 26 | `getStats` | Returns empty stats initially | Before any tiers set | Returns `{activeMeetings: 0, meetings: [], userTiers: 0}` |
-| 27 | `getStats` | Updates after cleanup | After setting 3 meeting tiers, then cleaning up 1 | Returns `{activeMeetings: 2, meetings: [2 entries], userTiers: ...}` |
+| 14 | `setTier` | **CRITICAL: Calls mediasoupManager.getConsumersForUser() and consumer.setPreferredLayers()** | `meetingId='meeting1'` (with 2 users, each with 1 consumer), `tier='MEDIUM'` | `mediasoupManager.getConsumersForUser()` called for each recipient; `consumer.setPreferredLayers({ spatialLayer: 1 })` called for each consumer; all promises resolve successfully |
+| 15 | `findMeetingForUser` | Finds meeting for user (via selectTierFor) | `userId='user1'` (in 'meeting1') | `selectTierFor('user1')` returns the meeting's tier, confirming user was found |
+| 16 | `findMeetingForUser` | Returns null for non-existent user | `userId='nonexistent'` | `selectTierFor('nonexistent')` returns 'HIGH' (default), indicating user not found in any meeting |
+| 17 | `cleanupMeeting` | Removes meeting tier | `meetingId='meeting1'` (tier='LOW') | Meeting tier removed from internal map; console logs "Cleaned up meeting meeting1" |
+| 18 | `cleanupMeeting` | Removes user tiers for meeting users | `meetingId='meeting1'` (with 'user1' and 'user2' having user tiers) | User tiers for user1 and user2 removed from internal map |
+| 19 | `cleanupMeeting` | Handles cleanup for non-existent meeting | `meetingId='nonexistent'` | No error thrown; console logs "Cleaned up meeting nonexistent" |
 
 ---
 
@@ -188,8 +177,27 @@ describe('StreamForwarder', () => {
 ### Coverage Goals
 
 - **MeetingRegistry:** 7 functions, 25 test cases = 100% function coverage
-- **StreamForwarder:** 9 functions, 27 test cases = 100% function coverage
-- **Total:** 52 test cases covering all 16 functions
+- **StreamForwarder:** 6 functions, 19 test cases = 100% function coverage (removed tests for unused methods: setTierForUser, getTier, getStats)
+- **Total:** 44 test cases covering all 13 functions (only methods in dev_specs/APIs.md or actively used)
 - Aim for >95% line coverage
 - All edge cases and error paths covered
+
+### Notes on Removed Tests
+
+**Removed Tests (9 total):**
+- Tests 14-16 (`setTierForUser`): Method not in dev_specs/APIs.md and not used in codebase (marked as "future" feature)
+- Tests 17-18 (`getTier`): Method not in dev_specs/APIs.md and not used in codebase
+- Tests 24-27 (`getStats`): Method not in dev_specs/APIs.md and not used in codebase
+
+**Added Test:**
+- Test 14 (`setTier`): **CRITICAL** - Verifies mediasoup Consumer layer switching (required for User Story 8)
+
+### Implementation Note: cleanupMeeting() Integration
+
+**Status:** ✅ **FIXED** - `cleanupMeeting()` is now called in `SignalingServer.handleLeave()` when the last user leaves a meeting, per `dev_specs/flow_charts.md` line 228.
+
+**Implementation:**
+- `SignalingServer.handleLeave()` checks if the leaving user is the last user in the meeting
+- If yes, calls `streamForwarder.cleanupMeeting(meetingId)` after `meetingRegistry.removeUser()`
+- This ensures StreamForwarder cleans up meeting-tier and user-tier mappings when meetings end
 

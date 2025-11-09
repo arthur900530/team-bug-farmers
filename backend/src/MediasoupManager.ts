@@ -50,6 +50,10 @@ export class MediasoupManager {
   
   // Track consumers: Map<consumerId, Consumer>
   private consumers: Map<string, Consumer> = new Map();
+  
+  // Track consumers per user: Map<userId, Consumer[]>
+  // From USER_STORY_8_IMPLEMENTATION_GUIDE.md: Needed for StreamForwarder to switch layers
+  private userConsumers: Map<string, Consumer[]> = new Map();
 
   /**
    * Initialize mediasoup Worker and Router
@@ -261,6 +265,14 @@ export class MediasoupManager {
     });
 
     this.consumers.set(consumer.id, consumer);
+    
+    // Track consumer per user (for User Story 8: layer switching)
+    let userConsumerList = this.userConsumers.get(receiverUserId);
+    if (!userConsumerList) {
+      userConsumerList = [];
+      this.userConsumers.set(receiverUserId, userConsumerList);
+    }
+    userConsumerList.push(consumer);
 
     console.log(`[MediasoupManager] Consumer created (ID: ${consumer.id})`);
 
@@ -277,6 +289,15 @@ export class MediasoupManager {
    */
   getProducer(userId: string): Producer | undefined {
     return this.producers.get(userId);
+  }
+
+  /**
+   * Get all Consumers for a user
+   * From USER_STORY_8_IMPLEMENTATION_GUIDE.md: Needed for StreamForwarder to switch layers
+   * Returns array of consumers that this user is receiving from
+   */
+  getConsumersForUser(userId: string): Consumer[] {
+    return this.userConsumers.get(userId) || [];
   }
 
   /**
@@ -321,12 +342,14 @@ export class MediasoupManager {
     }
 
     // Close consumers for this user
-    for (const [consumerId, consumer] of this.consumers.entries()) {
-      // Note: We need to track which consumers belong to which user
-      // For now, we'll close all consumers when a user leaves
-      // In production, maintain a userId → consumerId mapping
-      consumer.close();
-      this.consumers.delete(consumerId);
+    const userConsumerList = this.userConsumers.get(userId);
+    if (userConsumerList) {
+      for (const consumer of userConsumerList) {
+        consumer.close();
+        this.consumers.delete(consumer.id);
+      }
+      this.userConsumers.delete(userId);
+      console.log(`[MediasoupManager] Closed ${userConsumerList.length} consumers for user ${userId}`);
     }
   }
 
@@ -341,6 +364,7 @@ export class MediasoupManager {
       consumer.close();
     }
     this.consumers.clear();
+    this.userConsumers.clear();
 
     // Close all producers
     for (const producer of this.producers.values()) {

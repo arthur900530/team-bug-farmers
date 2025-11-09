@@ -29,10 +29,21 @@ import {
   LeaveMessage,
   JoinedMessage,
   ErrorMessage,
-  UserSession
+  UserSession,
+  FingerprintMessage,
+  AckSummaryMessage,
+  AckSummary,
+  RtcpReportMessage,
+  RtcpReport,
+  TierChangeMessage
 } from './types';
 import { MeetingRegistry } from './MeetingRegistry';
 import { MediasoupManager } from './MediasoupManager';
+import { FingerprintVerifier } from './FingerprintVerifier';
+import { AckAggregator } from './AckAggregator';
+import { RtcpCollector } from './RtcpCollector';
+import { QualityController } from './QualityController';
+import { StreamForwarder } from './StreamForwarder';
 
 interface ClientConnection {
   ws: WebSocket;
@@ -46,15 +57,101 @@ export class SignalingServer {
   private clients: Map<WebSocket, ClientConnection> = new Map();
   private meetingRegistry: MeetingRegistry;
   private mediasoupManager: MediasoupManager;
+  private streamForwarder: StreamForwarder;
   // Store RTP parameters and transport ID from client offers (keyed by userId) for Producer creation
   private pendingRtpParameters: Map<string, any> = new Map();
   private pendingTransportIds: Map<string, string> = new Map();
   // Store RTP capabilities per user (for Consumer creation)
   private userRtpCapabilities: Map<string, any> = new Map();
+  // User Story 3: Fingerprint verification components
+  private fingerprintVerifier: FingerprintVerifier;
+  private ackAggregator: AckAggregator;
+  private cleanupInterval: NodeJS.Timeout | null = null;
+  
+  // User Story 8: Adaptive Quality Management components
+  private rtcpCollector: RtcpCollector;
+  private qualityController: QualityController;
+  private qualityEvaluationInterval: NodeJS.Timeout | null = null;
 
-  constructor(port: number, meetingRegistry: MeetingRegistry, mediasoupManager: MediasoupManager) {
+  constructor(
+    port: number,
+    meetingRegistry: MeetingRegistry,
+    mediasoupManager: MediasoupManager,
+    streamForwarder: StreamForwarder,
+    rtcpCollector: RtcpCollector,
+    qualityController: QualityController
+  ) {
     this.meetingRegistry = meetingRegistry;
     this.mediasoupManager = mediasoupManager;
+    this.streamForwarder = streamForwarder;
+    this.rtcpCollector = rtcpCollector;
+    this.qualityController = qualityController;
+
+    // Initialize User Story 3 components
+    // From dev_specs/classes.md lines 323-324: FingerprintVerifier
+    this.fingerprintVerifier = new FingerprintVerifier();
+    
+    // From dev_specs/classes.md lines 326-327: AckAggregator
+    this.ackAggregator = new AckAggregator(meetingRegistry);
+    
+    // Set up callbacks between FingerprintVerifier and AckAggregator
+    // From flow_charts.md lines 181-184: FingerprintVerifier feeds results to AckAggregator
+    this.fingerprintVerifier.setCallbacks(
+      (userId: string, frameId: string) => {
+        // onMatch: Get meetingId and senderUserId from fingerprint
+        const fingerprint = this.fingerprintVerifier.getFingerprint(frameId);
+        if (fingerprint) {
+          // Get meetingId from fingerprint (stored when fingerprint was added)
+          const meetingId = (fingerprint as any).meetingId;
+          if (meetingId) {
+            this.ackAggregator.onDecodeAck(meetingId, fingerprint.senderUserId, userId, true);
+          } else {
+            // Fallback: search through all meetings
+            this.meetingRegistry.getAllMeetings().forEach(m => {
+              if (m.sessions.some(s => s.userId === fingerprint.senderUserId)) {
+                this.ackAggregator.onDecodeAck(m.meetingId, fingerprint.senderUserId, userId, true);
+              }
+            });
+          }
+        }
+      },
+      (userId: string, frameId: string) => {
+        // onMismatch: Get meetingId and senderUserId from fingerprint
+        const fingerprint = this.fingerprintVerifier.getFingerprint(frameId);
+        if (fingerprint) {
+          const meetingId = (fingerprint as any).meetingId;
+          if (meetingId) {
+            this.ackAggregator.onDecodeAck(meetingId, fingerprint.senderUserId, userId, false);
+          } else {
+            // Fallback: search through all meetings
+            this.meetingRegistry.getAllMeetings().forEach(m => {
+              if (m.sessions.some(s => s.userId === fingerprint.senderUserId)) {
+                this.ackAggregator.onDecodeAck(m.meetingId, fingerprint.senderUserId, userId, false);
+              }
+            });
+          }
+        }
+      }
+    );
+    
+    // Set up callback for AckAggregator to send summaries
+    // From flow_charts.md line 193: "Send via SignalingClient to speaker's UserClient"
+    this.ackAggregator.setOnSummaryCallback((meetingId: string, senderUserId: string, summary: AckSummary) => {
+      this.sendAckSummary(senderUserId, summary);
+    });
+    
+    // Start periodic cleanup of expired fingerprints
+    // From data_schemas.md line 96: TTL is 15 seconds, cleanup every 5 seconds
+    this.cleanupInterval = setInterval(() => {
+      this.fingerprintVerifier.cleanupExpiredFingerprints();
+    }, 5000);
+
+    // User Story 8: Start periodic quality evaluation
+    // From dev_specs/flow_charts.md line 130: "RTCP Interval Triggered Every 5 seconds"
+    // From dev_specs/public_interfaces.md line 203: "Interval: every 5 seconds"
+    this.qualityEvaluationInterval = setInterval(() => {
+      this.evaluateAllMeetings();
+    }, 5000);
 
     // From public_interfaces.md line 20: WebSocket over TLS
     // For development, we'll use ws:// instead of wss://
@@ -126,6 +223,12 @@ export class SignalingServer {
           this.handleLeave(ws, message).catch(err => {
             console.error('[SignalingServer] Error handling leave:', err);
           });
+          break;
+        case 'frame-fingerprint':
+          this.handleFingerprint(ws, message);
+          break;
+        case 'rtcp-report':
+          this.handleRtcpReport(ws, message);
           break;
         default:
           this.sendError(ws, 400, 'Unknown message type');
@@ -414,8 +517,23 @@ export class SignalingServer {
       console.error(`[SignalingServer] Error cleaning up mediasoup for ${userId}:`, error);
     }
 
+    // User Story 8: Cleanup RTCP reports for this user
+    this.rtcpCollector.cleanupUser(userId);
+
+    // Check if this is the last user before removing (to determine if meeting will be deleted)
+    const meeting = this.meetingRegistry.getMeeting(meetingId);
+    const isLastUser = meeting && meeting.sessions.length === 1;
+
     // Remove user from meeting registry
+    // From flow_charts.md line 222: "MeetingRegistry.removeUser meetingId, userId"
     this.meetingRegistry.removeUser(meetingId, userId);
+
+    // If this was the last user, cleanup StreamForwarder for this meeting
+    // From flow_charts.md line 228: "StreamForwarder cleanup for meetingId"
+    if (isLastUser) {
+      this.streamForwarder.cleanupMeeting(meetingId);
+      console.log(`[SignalingServer] Meeting ${meetingId} ended, cleaned up StreamForwarder`);
+    }
 
     // Notify other participants
     this.notifyOthers(meetingId, userId, {
@@ -424,6 +542,75 @@ export class SignalingServer {
     });
 
     console.log(`[SignalingServer] User ${userId} left meeting ${meetingId}`);
+  }
+
+  /**
+   * Handle frame-fingerprint message from client
+   * From flow_charts.md lines 172-173: Receive sender/receiver fingerprints
+   * From public_interfaces.md: Fingerprint messages sent via WebSocket
+   * From USER_STORY_3_IMPLEMENTATION_GUIDE.md: Fingerprints sent via WebSocket (not RTP)
+   */
+  private handleFingerprint(ws: WebSocket, message: FingerprintMessage): void {
+    const clientConn = this.clients.get(ws);
+    
+    if (!clientConn || !clientConn.authenticated || !clientConn.meetingId || !clientConn.userId) {
+      console.warn('[SignalingServer] Fingerprint message from unauthenticated client');
+      this.sendError(ws, 401, 'Not authenticated');
+      return;
+    }
+    
+    const { frameId, crc32, senderUserId, receiverUserId, timestamp } = message;
+    const meetingId = clientConn.meetingId;
+    
+    if (senderUserId && senderUserId === clientConn.userId) {
+      // Sender fingerprint
+      // From flow_charts.md line 172: "Receive sender's encoded FrameFingerprint"
+      console.log(`[SignalingServer] Received sender fingerprint: frameId=${frameId}, sender=${senderUserId}`);
+      this.fingerprintVerifier.addSenderFingerprint(frameId, crc32, senderUserId, meetingId);
+    } else if (receiverUserId && receiverUserId === clientConn.userId && senderUserId) {
+      // Receiver fingerprint
+      // From flow_charts.md line 173: "Receive all receivers' decoded FrameFingerprints"
+      console.log(`[SignalingServer] Received receiver fingerprint: frameId=${frameId}, receiver=${receiverUserId}, sender=${senderUserId}`);
+      this.fingerprintVerifier.addReceiverFingerprint(frameId, crc32, receiverUserId);
+    } else {
+      console.warn('[SignalingServer] Invalid fingerprint message: missing senderUserId or receiverUserId');
+      this.sendError(ws, 400, 'Invalid fingerprint message');
+    }
+  }
+
+  /**
+   * Send ACK summary to sender
+   * From flow_charts.md line 193: "Send via SignalingClient to speaker's UserClient"
+   * From public_interfaces.md line 124: "ack-summary" message type
+   */
+  private sendAckSummary(senderUserId: string, summary: AckSummary): void {
+    console.log(`[SignalingServer] Sending ACK summary to sender: ${senderUserId}, acked=${summary.ackedUsers.length}, missing=${summary.missingUsers.length}`);
+    
+    // Find client connection for sender
+    const senderWs = this.findClientWebSocket(senderUserId);
+    
+    if (!senderWs) {
+      console.warn(`[SignalingServer] Cannot send ACK summary: sender ${senderUserId} not found`);
+      return;
+    }
+    
+    // Create ACK summary message
+    // From public_interfaces.md line 136: "ack-summary" message format
+    const ackMessage: AckSummaryMessage = {
+      type: 'ack-summary',
+      meetingId: summary.meetingId,
+      ackedUsers: summary.ackedUsers,
+      missingUsers: summary.missingUsers,
+      timestamp: summary.timestamp
+    };
+    
+    // Send via WebSocket
+    if (senderWs.readyState === 1) { // WebSocket.OPEN
+      senderWs.send(JSON.stringify(ackMessage));
+      console.log(`[SignalingServer] ACK summary sent to ${senderUserId}`);
+    } else {
+      console.warn(`[SignalingServer] Cannot send ACK summary: WebSocket not open for ${senderUserId}`);
+    }
   }
 
   /**
@@ -449,8 +636,23 @@ export class SignalingServer {
         console.error(`[SignalingServer] Error cleaning up mediasoup for ${userId}:`, error);
       }
       
+      // User Story 8: Cleanup RTCP reports for this user
+      this.rtcpCollector.cleanupUser(userId);
+      
+      // Check if this is the last user before removing (to determine if meeting will be deleted)
+      const meeting = this.meetingRegistry.getMeeting(meetingId);
+      const isLastUser = meeting && meeting.sessions.length === 1;
+      
       // Remove from meeting registry
+      // From flow_charts.md line 222: "MeetingRegistry.removeUser meetingId, userId"
       this.meetingRegistry.removeUser(meetingId, userId);
+      
+      // If this was the last user, cleanup StreamForwarder for this meeting
+      // From flow_charts.md line 228: "StreamForwarder cleanup for meetingId"
+      if (isLastUser) {
+        this.streamForwarder.cleanupMeeting(meetingId);
+        console.log(`[SignalingServer] Meeting ${meetingId} ended (last user disconnected), cleaned up StreamForwarder`);
+      }
       
       // Notify other participants
       this.notifyOthers(meetingId, userId, {
@@ -1019,9 +1221,118 @@ export class SignalingServer {
   }
 
   /**
+   * Handle RTCP report from client
+   * From dev_specs/flow_charts.md lines 108-112: RTCP report generation and sending
+   * From dev_specs/public_interfaces.md: RTCP RR (Receiver Report)
+   */
+  private handleRtcpReport(ws: WebSocket, message: RtcpReportMessage): void {
+    const clientConn = this.clients.get(ws);
+
+    if (!clientConn || !clientConn.authenticated || !clientConn.meetingId || !clientConn.userId) {
+      console.warn('[SignalingServer] RTCP report from unauthenticated client');
+      this.sendError(ws, 401, 'Not authenticated');
+      return;
+    }
+
+    const { userId, lossPct, jitterMs, rttMs, timestamp } = message;
+    const meetingId = clientConn.meetingId;
+
+    // Validate userId matches authenticated user
+    if (userId !== clientConn.userId) {
+      console.warn(`[SignalingServer] RTCP report userId mismatch: ${userId} vs ${clientConn.userId}`);
+      this.sendError(ws, 400, 'Invalid userId');
+      return;
+    }
+
+    // Create RtcpReport object
+    const report: RtcpReport = {
+      userId,
+      lossPct,
+      jitterMs,
+      rttMs,
+      timestamp,
+    };
+
+    // Collect report
+    // From dev_specs/flow_charts.md line 112: "Send to RtcpCollector"
+    this.rtcpCollector.collect(report);
+
+    console.log(`[SignalingServer] Received RTCP report from user ${userId}: loss=${(lossPct * 100).toFixed(2)}%, jitter=${jitterMs.toFixed(2)}ms, rtt=${rttMs.toFixed(2)}ms`);
+  }
+
+  /**
+   * Evaluate all active meetings for quality tier changes
+   * From dev_specs/flow_charts.md lines 130-159: Adaptive Quality Control Loop
+   * Called periodically every 5 seconds
+   */
+  private async evaluateAllMeetings(): Promise<void> {
+    const meetings = this.meetingRegistry.getAllMeetings();
+    
+    for (const meeting of meetings) {
+      try {
+        // Get current tier before evaluation
+        const previousTier = meeting.currentTier;
+        
+        // Evaluate meeting and update tier if needed
+        await this.qualityController.evaluateMeeting(meeting.meetingId);
+        
+        // Get current tier after evaluation
+        const updatedMeeting = this.meetingRegistry.getMeeting(meeting.meetingId);
+        if (updatedMeeting && updatedMeeting.currentTier !== previousTier) {
+          // Only send tier change notification if tier actually changed
+          // From dev_specs/flow_charts.md line 154: "SignalingServer.notify Tier change to all participants"
+          this.sendTierChange(meeting.meetingId, updatedMeeting.currentTier);
+        }
+      } catch (error) {
+        console.error(`[SignalingServer] Error evaluating meeting ${meeting.meetingId}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Send tier change message to all participants in a meeting
+   * From dev_specs/flow_charts.md line 154: "SignalingServer.notify Tier change to all participants"
+   * From dev_specs/public_interfaces.md line 124: "tier-change" message type
+   */
+  private sendTierChange(meetingId: string, tier: 'LOW' | 'MEDIUM' | 'HIGH'): void {
+    const meeting = this.meetingRegistry.getMeeting(meetingId);
+    if (!meeting) {
+      console.warn(`[SignalingServer] Cannot send tier change: Meeting ${meetingId} not found`);
+      return;
+    }
+
+    const tierChangeMessage: TierChangeMessage = {
+      type: 'tier-change',
+      tier,
+      timestamp: Date.now(),
+    };
+
+    // Send to all participants in the meeting
+    for (const session of meeting.sessions) {
+      const clientWs = this.findClientWebSocket(session.userId);
+      if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify(tierChangeMessage));
+        console.log(`[SignalingServer] Sent tier change to user ${session.userId}: ${tier}`);
+      }
+    }
+  }
+
+  /**
    * Cleanup and close server
    */
   close(): void {
+    // Cleanup User Story 3 components
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    
+    // Cleanup User Story 8 components
+    if (this.qualityEvaluationInterval) {
+      clearInterval(this.qualityEvaluationInterval);
+      this.qualityEvaluationInterval = null;
+    }
+    
     this.wss.close();
     console.log('[SignalingServer] Server closed');
   }

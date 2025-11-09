@@ -100,6 +100,29 @@ export default function App() {
         });
       });
       
+      // User Story 3: Set up ACK summary callback
+      // From dev_specs/flow_charts.md line 195: "UserClient displays UI"
+      // From dev_specs/APIs.md line 26: "onAckSummary(callback)"
+      signalingClient.onAckSummary((summary: AckSummary) => {
+        setAckSummary(summary);
+        console.log('[App] ACK summary received:', summary);
+      });
+      
+      // User Story 8: Set up tier change callback
+      // From dev_specs/flow_charts.md line 154: "SignalingServer.notify Tier change to all participants"
+      // From dev_specs/APIs.md line 25: "onTierChange(callback)"
+      userClient.setOnTierChange((tier: QualityTier) => {
+        setCurrentTier(tier);
+        console.log('[App] Tier changed to:', tier);
+        
+        // Update all participants' quality tier to match meeting tier
+        // From dev_specs/flow_charts.md line 155: "Update UserSession.qualityTier for all users"
+        setParticipants(prev => prev.map(p => ({
+          ...p,
+          qualityTier: tier
+        })));
+      });
+      
       // Join meeting using UserClient
       await userClient.joinMeeting();
       
@@ -107,7 +130,7 @@ export default function App() {
       // This allows verification scripts to access UserClient instance
       (window as any).userClient = userClient;
       console.log('[App] UserClient exposed globally as window.userClient (for Phase 4 testing)');
-      
+    
       // Update connection state (UserClient will update via callback)
       setConnectionState(userClient.getConnectionState());
       

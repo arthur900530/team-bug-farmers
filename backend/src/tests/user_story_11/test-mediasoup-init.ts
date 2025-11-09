@@ -3,7 +3,7 @@
  * Phase 2.1.1: Verify MediasoupManager can initialize Worker and Router
  */
 
-import { MediasoupManager } from '../MediasoupManager';
+import { MediasoupManager } from '../../MediasoupManager';
 
 async function testMediasoupInit() {
   console.log('[Test] Starting MediasoupManager initialization test...');

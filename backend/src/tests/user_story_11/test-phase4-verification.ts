@@ -8,8 +8,8 @@
  * - Transports are connected
  */
 
-import { MediasoupManager } from '../MediasoupManager';
-import { MeetingRegistry } from '../MeetingRegistry';
+import { MediasoupManager } from '../../MediasoupManager';
+import { MeetingRegistry } from '../../MeetingRegistry';
 
 async function verifyServerState() {
   console.log('[Phase 4 Verification] Checking server state...\n');

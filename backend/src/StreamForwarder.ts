@@ -155,8 +155,10 @@ export class StreamForwarder {
    * With mediasoup:
    * - Changes the spatial layer that Consumers receive
    * - mediasoup handles smooth transition between layers
+   * 
+   * From USER_STORY_8_IMPLEMENTATION_GUIDE.md: Now implements actual layer switching
    */
-  setTier(meetingId: string, tier: QualityTier): void {
+  async setTier(meetingId: string, tier: QualityTier): Promise<void> {
     const previousTier = this.meetingTiers.get(meetingId);
     
     if (previousTier === tier) {
@@ -179,13 +181,27 @@ export class StreamForwarder {
     
     console.log(`[StreamForwarder] Updating ${recipients.length} consumers to tier ${tier} (layer ${spatialLayer})`);
     
-    // With mediasoup, we'd call:
-    // for (const recipient of recipients) {
-    //   const consumers = this.mediasoupManager.getConsumersForUser(recipient.userId);
-    //   for (const consumer of consumers) {
-    //     await consumer.setPreferredLayers({ spatialLayer });
-    //   }
-    // }
+    // Update all consumers in this meeting to use the new tier
+    // From USER_STORY_8_IMPLEMENTATION_GUIDE.md: Use setPreferredLayers() to switch layers
+    const updatePromises: Promise<void>[] = [];
+    
+    for (const recipient of recipients) {
+      const consumers = this.mediasoupManager.getConsumersForUser(recipient.userId);
+      for (const consumer of consumers) {
+        updatePromises.push(
+          consumer.setPreferredLayers({ spatialLayer })
+            .then(() => {
+              console.log(`[StreamForwarder] Updated consumer ${consumer.id} to layer ${spatialLayer} (tier ${tier})`);
+            })
+            .catch((error) => {
+              console.error(`[StreamForwarder] Error setting layers for consumer ${consumer.id}:`, error);
+            })
+        );
+      }
+    }
+    
+    // Wait for all layer updates to complete
+    await Promise.all(updatePromises);
     
     // mediasoup handles:
     // 1. Smooth layer transition (no glitches)

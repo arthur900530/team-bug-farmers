@@ -3,7 +3,7 @@
  * Phase 2.1.3: Verify Producer can be created and receives RTP
  */
 
-import { MediasoupManager } from '../MediasoupManager';
+import { MediasoupManager } from '../../MediasoupManager';
 
 async function testProducerCreation() {
   console.log('[Test] Starting MediasoupManager Producer Creation test...');

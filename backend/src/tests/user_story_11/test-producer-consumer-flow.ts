@@ -9,7 +9,7 @@
  */
 
 import WebSocket from 'ws';
-import { MediasoupManager } from '../MediasoupManager';
+import { MediasoupManager } from '../../MediasoupManager';
 
 const SERVER_URL = 'ws://localhost:8080';
 const MEETING_ID = 'test-meeting-producer-consumer';

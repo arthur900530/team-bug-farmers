@@ -3,7 +3,7 @@
  * Phase 2.1.2: Verify transport creation with ICE/DTLS parameters
  */
 
-import { MediasoupManager } from '../MediasoupManager';
+import { MediasoupManager } from '../../MediasoupManager';
 
 async function testTransportCreation() {
   console.log('[Test] Starting MediasoupManager Transport Creation test...');

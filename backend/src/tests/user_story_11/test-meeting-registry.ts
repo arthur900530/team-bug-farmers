@@ -3,8 +3,8 @@
  * Phase 2.2.1: Verify all MeetingRegistry methods work correctly
  */
 
-import { MeetingRegistry } from '../MeetingRegistry';
-import { UserSession } from '../types';
+import { MeetingRegistry } from '../../MeetingRegistry';
+import { UserSession } from '../../types';
 
 async function testMeetingRegistry() {
   console.log('[Test] Starting MeetingRegistry Operations test...');

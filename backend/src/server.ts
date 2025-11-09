@@ -15,6 +15,8 @@ import { SignalingServer } from './SignalingServer';
 import { MeetingRegistry } from './MeetingRegistry';
 import { MediasoupManager } from './MediasoupManager';
 import { StreamForwarder } from './StreamForwarder';
+import { RtcpCollector } from './RtcpCollector';
+import { QualityController } from './QualityController';
 
 // Configuration
 const WS_PORT = parseInt(process.env.WS_PORT || '8080');
@@ -42,8 +44,23 @@ console.log('===========================================');
     // Integrated with mediasoup for RTP packet forwarding
     const streamForwarder = new StreamForwarder(meetingRegistry, mediasoupManager);
 
+    // User Story 8: Create RTCP Collector and Quality Controller
+    // From dev_specs/classes.md C2.4.1: RtcpCollector
+    const rtcpCollector = new RtcpCollector(meetingRegistry);
+    
+    // From dev_specs/classes.md C2.4.2: QualityController
+    const qualityController = new QualityController(rtcpCollector, streamForwarder, meetingRegistry);
+    console.log('✅ User Story 8 components initialized (RtcpCollector, QualityController)');
+
     // Create SignalingServer (from dev_specs/classes.md M2.1)
-    const signalingServer = new SignalingServer(WS_PORT, meetingRegistry, mediasoupManager);
+    const signalingServer = new SignalingServer(
+      WS_PORT,
+      meetingRegistry,
+      mediasoupManager,
+      streamForwarder,
+      rtcpCollector,
+      qualityController
+    );
 
     console.log('✅ Server ready for WebSocket connections');
     console.log(`   Connect at: ws://localhost:${WS_PORT}`);

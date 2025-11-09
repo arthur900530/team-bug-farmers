@@ -2,13 +2,13 @@
 
 **Story:** "As a user, I want real-time feedback showing that other participants can hear me so that I can confidently speak without having to ask 'can you hear me?' every call."
 
-**Purpose:** Provide visual feedback to confirm that outbound audio is successfully received by other participants using CRC32 fingerprint verification.
+**Purpose:** This document provides a comprehensive overview of User Story 3 implementation to guide future LLMs implementing User Story 8. It explains what exists, what's safe to modify, dependencies, risks, and integration points.
 
-**Status:** Planning Phase  
+**Status:** ✅ Complete  
 **Depends on:** User Story 11 (✅ Complete)  
-**Last Updated:** November 7, 2025
+**Last Updated:** November 9, 2025
 
-**Note:** This document follows the same structure as `USER_STORY_11_IMPLEMENTATION_GUIDE.md` for consistency. It provides a comprehensive guide for implementing User Story 3, including what exists, what needs to be built, dependencies, risks, and integration points.
+**Note:** This document follows the same structure as `USER_STORY_11_IMPLEMENTATION_GUIDE.md` for consistency.
 
 ---
 
@@ -665,8 +665,6 @@ export interface FingerprintMessage {
 
 ## ✅ Technical Decisions (RESOLVED)
 
-**📄 Full Decision Record:** See `USER_STORY_3_TECHNICAL_DECISIONS.md` for complete documentation.
-
 ### Decision 1: CRC32 Computation on Encoded Frames (Sender Side)
 **Issue:** WebRTC handles encoding internally. We cannot access encoded Opus frames directly.
 
@@ -679,8 +677,6 @@ export interface FingerprintMessage {
 - **Implementation:** Use `AudioCapture.readFrame()` to get PCM frames, compute CRC32, send via WebSocket
 
 **Spec Reference:** `flow_charts.md` line 66: "UserClient.computeCrc32 encoded frame" (approximated with PCM)
-
-**📄 Details:** See `USER_STORY_3_TECHNICAL_DECISIONS.md` section "Decision 1"
 
 ---
 
@@ -700,8 +696,6 @@ export interface FingerprintMessage {
 - **Packet Loss Handling:** If no match found within tolerance, frame is considered lost (NACK)
 
 **Spec Reference:** `flow_charts.md` lines 104-106: Receiver computes CRC32 on decoded frame (matching via RTP timestamp)
-
-**📄 Details:** See `USER_STORY_3_TECHNICAL_DECISIONS.md` section "Decision 2"
 
 ---
 
@@ -784,7 +778,6 @@ export interface FingerprintMessage {
 - **`dev_specs/public_interfaces.md`** - WebSocket message formats (line 124)
 - **`dev_specs/classes.md`** - Class responsibilities (lines 323-330)
 - **`USER_STORY_11_IMPLEMENTATION_GUIDE.md`** - What's safe to modify, dependencies, risks
-- **`USER_STORY_3_TECHNICAL_DECISIONS.md`** - **📄 Complete decision record for technical blockers**
 
 ---
 

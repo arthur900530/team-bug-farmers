@@ -28,7 +28,10 @@ import type {
   IceCandidateMessage,
   ErrorMessage,
   IceCandidate,
-  AckSummary
+  AckSummary,
+  FingerprintMessage,
+  RtcpReportMessage,
+  RtcpReport
 } from '../types';
 
 type MessageCallback<T> = (message: T) => void;
@@ -212,6 +215,36 @@ export class SignalingClient {
 
     this.send(iceCandidateMessage);
     console.log('[SignalingClient] Sent ICE CANDIDATE');
+  }
+
+  /**
+   * Send frame fingerprint message
+   * From USER_STORY_3_IMPLEMENTATION_GUIDE.md: Fingerprints sent via WebSocket (not RTP)
+   * From public_interfaces.md: Fingerprint messages sent via WebSocket
+   */
+  sendFingerprint(fingerprint: FingerprintMessage): void {
+    this.send(fingerprint);
+    console.log(`[SignalingClient] Sent fingerprint: frameId=${fingerprint.frameId}`);
+  }
+
+  /**
+   * Send RTCP report message
+   * From dev_specs/flow_charts.md lines 108-112: RTCP report generation and sending
+   * From dev_specs/public_interfaces.md: RTCP RR (Receiver Report)
+   * From USER_STORY_8_IMPLEMENTATION_GUIDE.md: RTCP reports sent every 5 seconds
+   */
+  sendRtcpReport(report: RtcpReport): void {
+    const rtcpReportMessage: RtcpReportMessage = {
+      type: 'rtcp-report',
+      userId: report.userId,
+      lossPct: report.lossPct,
+      jitterMs: report.jitterMs,
+      rttMs: report.rttMs,
+      timestamp: report.timestamp,
+    };
+
+    this.send(rtcpReportMessage);
+    console.log(`[SignalingClient] Sent RTCP report: loss=${(report.lossPct * 100).toFixed(2)}%, jitter=${report.jitterMs.toFixed(2)}ms, rtt=${report.rttMs.toFixed(2)}ms`);
   }
 
   /**

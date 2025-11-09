@@ -43,6 +43,18 @@ export interface RtcpReport {
   timestamp: number;
 }
 
+// User Story 8: RTCP report message sent via WebSocket
+// From public_interfaces.md - Client → Server Message
+// Consistent with backend/src/types.ts RtcpReportMessage
+export interface RtcpReportMessage {
+  type: 'rtcp-report';
+  userId: string;
+  lossPct: number;       // 0.0 to 1.0
+  jitterMs: number;      // milliseconds
+  rttMs: number;         // milliseconds
+  timestamp: number;     // Unix milliseconds
+}
+
 export interface AckSummary {
   meetingId: string;
   ackedUsers: string[];
@@ -92,9 +104,21 @@ export interface TierChangeMessage {
 
 export interface AckSummaryMessage {
   type: 'ack-summary';
+  meetingId: string;
   ackedUsers: string[];
   missingUsers: string[];
   timestamp: number;
+}
+
+// User Story 3: Fingerprint message (from public_interfaces.md)
+export interface FingerprintMessage {
+  type: 'frame-fingerprint';
+  frameId: string;
+  crc32: string;
+  senderUserId?: string;   // For sender fingerprints
+  receiverUserId?: string; // For receiver fingerprints
+  timestamp: number;
+  rtpTimestamp?: number;   // For frame matching (approximation approach)
 }
 
 export interface OfferMessage {
