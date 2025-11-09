@@ -550,11 +550,13 @@ export class SignalingServer {
   }
 
   /**
-   * Create mediasoup answer SDP
+   * Create WebRTC-compatible SDP answer
    * From dev_specs/public_interfaces.md line 144: "Server (via SFU) returns answer"
+   * From dev_specs/tech_stack.md line 40: "SDP – Capability negotiation and session description"
    * 
-   * This creates an SDP answer that includes mediasoup transport parameters
-   * Note: This is a simplified implementation. In production, proper SDP construction is needed.
+   * This creates a proper WebRTC SDP answer that standard RTCPeerConnection can understand.
+   * Uses mediasoup send transport parameters for the answer (client sends to server).
+   * Receiving will be handled separately via mediasoup consumers.
    */
   private createMediasoupAnswerSdp(
     transports: {
@@ -563,52 +565,92 @@ export class SignalingServer {
     },
     clientOfferSdp: string
   ): string {
-    // For mediasoup, we need to return transport parameters that the client can use
-    // The client will construct the proper SDP answer
-    // For now, we'll return a JSON-like structure in SDP format
-    // In production, this would be proper SDP construction
+    // Parse client offer to extract session information
+    // Extract session ID from offer (o= line)
+    const sessionMatch = clientOfferSdp.match(/^o=([^\s]+)\s+(\d+)\s+(\d+)\s+IN\s+IP4\s+([^\s]+)/m);
+    const sessionId = sessionMatch && sessionMatch[1] ? sessionMatch[1] : '-';
+    const sessionVersion = sessionMatch && sessionMatch[2] ? parseInt(sessionMatch[2], 10) : 0;
     
-    // Extract basic info from client offer
-    const sessionId = Date.now();
-    const version = 0;
+    // Extract media section info from offer
+    const mediaMatch = clientOfferSdp.match(/^m=audio\s+(\d+)\s+([^\s]+)\s+([^\r\n]+)/m);
+    const mediaPort = mediaMatch && mediaMatch[1] ? parseInt(mediaMatch[1], 10) : 9;
+    const mediaProtocol = mediaMatch && mediaMatch[2] ? mediaMatch[2] : 'UDP/TLS/RTP/SAVPF';
     
-    // Build SDP answer with mediasoup transport parameters
-    // From dev_specs: SDP format for WebRTC
+    // Use send transport for the answer (client sends to server)
+    // From dev_specs: Client sends RTP to server via Producer
+    const transport = transports.sendTransport;
+    const iceParams = transport.iceParameters;
+    const dtlsParams = transport.dtlsParameters;
+    
+    // Build standard WebRTC SDP answer
+    // Format: https://datatracker.ietf.org/doc/html/rfc4566
     let sdp = `v=0\r\n`;
-    sdp += `o=- ${sessionId} ${version} IN IP4 127.0.0.1\r\n`;
+    
+    // Session description
+    // o=<username> <sess-id> <sess-version> <nettype> <addrtype> <unicast-address>
+    sdp += `o=- ${sessionId} ${sessionVersion + 1} IN IP4 127.0.0.1\r\n`;
     sdp += `s=-\r\n`;
+    
+    // Timing (t=0 0 means session is not bounded)
     sdp += `t=0 0\r\n`;
     
-    // Add mediasoup transport parameters as SDP attributes
-    // Send transport
-    sdp += `a=send-transport-id:${transports.sendTransport.id}\r\n`;
-    sdp += `a=send-ice-ufrag:${transports.sendTransport.iceParameters.usernameFragment}\r\n`;
-    sdp += `a=send-ice-pwd:${transports.sendTransport.iceParameters.password}\r\n`;
-    
-    // Add ICE candidates for send transport
-    transports.sendTransport.iceCandidates.forEach((candidate: any, index: number) => {
-      sdp += `a=send-candidate:${candidate.foundation} ${candidate.priority} ${candidate.ip} ${candidate.port} ${candidate.type}\r\n`;
-    });
-    
-    // Recv transport
-    sdp += `a=recv-transport-id:${transports.recvTransport.id}\r\n`;
-    sdp += `a=recv-ice-ufrag:${transports.recvTransport.iceParameters.usernameFragment}\r\n`;
-    sdp += `a=recv-ice-pwd:${transports.recvTransport.iceParameters.password}\r\n`;
-    
-    // Add ICE candidates for recv transport
-    transports.recvTransport.iceCandidates.forEach((candidate: any, index: number) => {
-      sdp += `a=recv-candidate:${candidate.foundation} ${candidate.priority} ${candidate.ip} ${candidate.port} ${candidate.type}\r\n`;
-    });
-    
-    // DTLS parameters
-    sdp += `a=send-dtls-fingerprint:${transports.sendTransport.dtlsParameters.fingerprints[0].algorithm} ${transports.sendTransport.dtlsParameters.fingerprints[0].value}\r\n`;
-    sdp += `a=recv-dtls-fingerprint:${transports.recvTransport.dtlsParameters.fingerprints[0].algorithm} ${transports.recvTransport.dtlsParameters.fingerprints[0].value}\r\n`;
-    
     // Media section for audio
-    sdp += `m=audio 9 UDP/TLS/RTP/SAVPF 111\r\n`; // Opus payload type 111 from dev_specs
-    sdp += `c=IN IP4 0.0.0.0\r\n`;
-    sdp += `a=rtpmap:111 opus/48000/2\r\n`; // From dev_specs: Opus, 48kHz, 2 channels
+    // From dev_specs/public_interfaces.md line 220: Opus payload type 111
+    // From dev_specs/public_interfaces.md: Opus, 48kHz, 2 channels
+    sdp += `m=audio ${mediaPort} ${mediaProtocol} 111\r\n`;
+    
+    // Connection information
+    // Use first ICE candidate's IP, or default
+    const firstCandidate = transport.iceCandidates && transport.iceCandidates.length > 0
+      ? transport.iceCandidates[0]
+      : null;
+    const connectionIp = firstCandidate?.ip || '0.0.0.0';
+    sdp += `c=IN IP4 ${connectionIp}\r\n`;
+    
+    // ICE parameters (standard WebRTC format)
+    // From dev_specs/tech_stack.md line 37: "WebRTC – Connection establishment (ICE)"
+    sdp += `a=ice-ufrag:${iceParams.usernameFragment}\r\n`;
+    sdp += `a=ice-pwd:${iceParams.password}\r\n`;
+    
+    // ICE candidates (standard WebRTC format)
+    // Format: a=candidate:<foundation> <component-id> <transport> <priority> <ip> <port> typ <type>
+    transport.iceCandidates.forEach((candidate: any) => {
+      // mediasoup candidate format: { foundation, priority, ip, port, type, protocol }
+      // WebRTC SDP format: candidate:<foundation> <component> <transport> <priority> <ip> <port> typ <type>
+      const component = 1; // RTP component (1 for audio)
+      const transport = candidate.protocol?.toUpperCase() || 'UDP';
+      sdp += `a=candidate:${candidate.foundation} ${component} ${transport} ${candidate.priority} ${candidate.ip} ${candidate.port} typ ${candidate.type}`;
+      if (candidate.relatedAddress) {
+        sdp += ` raddr ${candidate.relatedAddress} rport ${candidate.relatedPort}`;
+      }
+      sdp += `\r\n`;
+    });
+    
+    // DTLS parameters (standard WebRTC format)
+    // From dev_specs/tech_stack.md line 37: "WebRTC – encryption (DTLS)"
+    // Format: a=fingerprint:<hash> <fingerprint-value>
+    if (dtlsParams.fingerprints && dtlsParams.fingerprints.length > 0) {
+      const fingerprint = dtlsParams.fingerprints[0];
+      sdp += `a=fingerprint:${fingerprint.algorithm} ${fingerprint.value}\r\n`;
+      sdp += `a=setup:actpass\r\n`; // Server can be active or passive
+    }
+    
+    // Media attributes
+    // From dev_specs/public_interfaces.md line 220: Opus payload type 111
+    // From dev_specs/public_interfaces.md: Opus, 48kHz, 2 channels
+    sdp += `a=rtpmap:111 opus/48000/2\r\n`;
+    
+    // Opus codec parameters
+    // From dev_specs/public_interfaces.md: Opus with in-band FEC and DTX
+    sdp += `a=fmtp:111 minptime=10;useinbandfec=1\r\n`;
+    
+    // Media direction: sendrecv (client can send and receive)
+    // Note: Receiving will be handled via mediasoup consumers separately
     sdp += `a=sendrecv\r\n`;
+    
+    // Additional WebRTC attributes
+    sdp += `a=rtcp-mux\r\n`; // RTCP multiplexing (RTCP on same port as RTP)
+    sdp += `a=rtcp-rsize\r\n`; // Reduced-size RTCP
     
     return sdp;
   }
