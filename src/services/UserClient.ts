@@ -558,5 +558,24 @@ export class UserClient {
   getRemoteAudioVolume(): number {
     return this.audioPlayer.getVolume();
   }
+
+  /**
+   * Get local audio level (from microphone)
+   * For Phase 4 testing: Verify microphone is capturing audio
+   */
+  getLocalAudioLevel(): number {
+    return this.audioCapture.getAudioLevel();
+  }
+
+  /**
+   * Get WebRTC peer connection stats
+   * For Phase 4 testing: Verify RTP packet transmission/reception
+   */
+  async getPeerConnectionStats(): Promise<Map<string, RTCStatsReport>> {
+    if (!this.peerConnection) {
+      throw new Error('Peer connection not established');
+    }
+    return await this.peerConnection.getStats();
+  }
 }
 
