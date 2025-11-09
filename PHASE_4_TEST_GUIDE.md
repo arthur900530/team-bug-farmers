@@ -121,22 +121,40 @@ await clientB.joinMeeting();
 
 **Client A (Sender) - Browser Console:**
 ```javascript
+// Get peer connection stats
 const stats = await clientA.getPeerConnectionStats();
-const senderStats = Array.from(stats.values())
-  .find(s => s.type === 'outbound-rtp' && s.mediaType === 'audio');
-console.log('Packets sent:', senderStats?.packetsSent);
-console.log('Bytes sent:', senderStats?.bytesSent);
-// Should be > 0 when speaking
+// Convert Map to Array and find audio sender stats
+const statsArray = Array.from(stats.values());
+const senderStats = statsArray.find(s => 
+  s.type === 'outbound-rtp' && 
+  (s.mediaType === 'audio' || s.kind === 'audio')
+);
+if (senderStats) {
+  console.log('Packets sent:', senderStats.packetsSent);
+  console.log('Bytes sent:', senderStats.bytesSent);
+  // Should be > 0 when speaking
+} else {
+  console.log('No sender stats found yet');
+}
 ```
 
 **Client B (Receiver) - Browser Console:**
 ```javascript
+// Get peer connection stats
 const stats = await clientB.getPeerConnectionStats();
-const receiverStats = Array.from(stats.values())
-  .find(s => s.type === 'inbound-rtp' && s.mediaType === 'audio');
-console.log('Packets received:', receiverStats?.packetsReceived);
-console.log('Bytes received:', receiverStats?.bytesReceived);
-// Should be > 0 when receiving audio
+// Convert Map to Array and find audio receiver stats
+const statsArray = Array.from(stats.values());
+const receiverStats = statsArray.find(s => 
+  s.type === 'inbound-rtp' && 
+  (s.mediaType === 'audio' || s.kind === 'audio')
+);
+if (receiverStats) {
+  console.log('Packets received:', receiverStats.packetsReceived);
+  console.log('Bytes received:', receiverStats.bytesReceived);
+  // Should be > 0 when receiving audio
+} else {
+  console.log('No receiver stats found yet');
+}
 ```
 
 ### Success Criteria

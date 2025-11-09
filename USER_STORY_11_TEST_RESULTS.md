@@ -486,12 +486,65 @@ cd backend && npx tsc test-meeting-registry.ts ... && node test-meeting-registry
 
 ---
 
+---
+
+## 📊 Phase 4: End-to-End Testing ⬜ IN PROGRESS
+
+### Overview
+Phase 4 tests verify complete audio transmission from sender microphone through the server to receiver speakers using **real browser clients**.
+
+**Test Guide:** See `PHASE_4_TEST_GUIDE.md` for detailed step-by-step instructions.
+
+### P4.1: Single Sender → Server → Single Receiver ⬜ NOT TESTED YET
+
+**Test File:** Manual testing with browser clients (see `PHASE_4_TEST_GUIDE.md`)
+
+**Prerequisites:**
+- Backend server running
+- 2 browser windows/tabs
+- Microphone access granted
+- Speakers enabled
+
+**Status:** ⬜ **NOT TESTED YET**  
+**Notes:** Requires manual testing with real browser clients. Test guide created.
+
+---
+
+### P4.2: Bidirectional Communication ⬜ NOT TESTED YET
+
+**Test File:** Manual testing with browser clients (see `PHASE_4_TEST_GUIDE.md`)
+
+**Status:** ⬜ **NOT TESTED YET**  
+**Notes:** Requires manual testing with 2 browser clients sending/receiving simultaneously.
+
+---
+
+### P4.3: Multiple Receivers ⬜ NOT TESTED YET
+
+**Test File:** Manual testing with browser clients (see `PHASE_4_TEST_GUIDE.md`)
+
+**Status:** ⬜ **NOT TESTED YET**  
+**Notes:** Requires manual testing with 1 sender and 2+ receivers.
+
+**Phase 4 Summary:**
+- ⬜ P4.1: Single Sender → Server → Single Receiver - NOT TESTED
+- ⬜ P4.2: Bidirectional Communication - NOT TESTED
+- ⬜ P4.3: Multiple Receivers - NOT TESTED
+
+**Phase 4 Status:** ⬜ **IN PROGRESS** (0/3 tests completed)
+
+**Helper Methods Added:**
+- ✅ `UserClient.getLocalAudioLevel()` - Get microphone audio level
+- ✅ `UserClient.getPeerConnectionStats()` - Get WebRTC stats for verification
+
+---
+
 ## Next Steps
 
 1. ✅ **Phase 1 Complete** - Dependencies verified
 2. ✅ **Phase 2 Complete** - Component-level testing (backend components verified)
 3. ✅ **Phase 3 Complete** - Integration testing (WebSocket connections, SignalingServer, Producer/Consumer)
-4. ⬜ **Phase 4** - End-to-end testing (2+ browser clients, audio transmission)
+4. ⬜ **Phase 4** - End-to-end testing (2+ browser clients, audio transmission) - **IN PROGRESS**
 5. ⬜ **Phase 5** - Stress testing (10 users)
 
 ---
@@ -502,7 +555,12 @@ cd backend && npx tsc test-meeting-registry.ts ... && node test-meeting-registry
 **Passed:** 15 tests  
 **Failed:** 0 tests  
 **Deferred:** 0 tests  
-**Not Tested:** 12 tests
+**Not Tested:** 12 tests (Phase 4: 3 tests, Phase 5: 9 tests)
+
+**Phase 4 Status:** ⬜ **IN PROGRESS**
+- Test guide created: `PHASE_4_TEST_GUIDE.md`
+- Helper methods added to UserClient
+- Ready for manual testing with browser clients
 
 **Revisions:**
 - ✅ Phase 2: Added P2.1.5 (RTP Parameter Extraction test)
