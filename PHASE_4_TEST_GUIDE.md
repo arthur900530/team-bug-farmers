@@ -34,10 +34,20 @@ Verify complete audio path from sender microphone to receiver speakers through s
 ### Steps
 
 #### 1. Start Backend Server
+
+**Important:** Make sure port 8080 is not already in use. If you get `EADDRINUSE` error:
+```bash
+# Find and kill process using port 8080
+lsof -ti:8080 | xargs kill
+```
+
+Then start the server:
 ```bash
 cd backend
 npm run dev
 ```
+
+**Note:** This runs the **backend WebSocket server** (different from root `npm run dev` which runs the frontend).
 
 Verify server logs show:
 - `[SignalingServer] WebSocket server started on port 8080`
