@@ -210,6 +210,25 @@ describe('StreamForwarder', () => {
       const result = forwarder.selectTierFor('nonexistent');
       expect(result).toBe('HIGH');
     });
+
+    test('Test 8a: Returns HIGH when user in meeting but meeting has no tier set', () => {
+      const userId = 'user1';
+      const meetingId = 'meeting1';
+      const recipients = [createUserSession(userId)];
+      
+      // Meeting exists but no tier has been set for it
+      mockRegistry.getAllMeetings.mockReturnValue([
+        {
+          meetingId,
+          currentTier: 'HIGH',
+          createdAt: Date.now(),
+          sessions: recipients,
+        },
+      ]);
+
+      const result = forwarder.selectTierFor(userId);
+      expect(result).toBe('HIGH'); // Should return HIGH as default
+    });
   });
 
   describe('setTier', () => {
@@ -391,6 +410,173 @@ describe('StreamForwarder', () => {
       );
       // Should not throw error
       expect(consoleErrorSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setTierForUser', () => {
+    test('Test 20: Sets tier for specific user', () => {
+      const userId = 'user1';
+      const tier = 'MEDIUM';
+
+      forwarder.setTierForUser(userId, tier);
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        '[StreamForwarder] Set tier for user user1: none → MEDIUM'
+      );
+    });
+
+    test('Test 21: Updates user tier from MEDIUM to LOW', () => {
+      const userId = 'user1';
+
+      forwarder.setTierForUser(userId, 'MEDIUM');
+      consoleLogSpy.mockClear();
+      forwarder.setTierForUser(userId, 'LOW');
+
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        '[StreamForwarder] Set tier for user user1: MEDIUM → LOW'
+      );
+    });
+
+    test('Test 22: Skips update when user tier unchanged', () => {
+      const userId = 'user1';
+
+      forwarder.setTierForUser(userId, 'HIGH');
+      consoleLogSpy.mockClear();
+      forwarder.setTierForUser(userId, 'HIGH');
+
+      // Should not log when tier is unchanged
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+
+    test('Test 23: User-specific tier is returned by selectTierFor', () => {
+      const userId = 'user1';
+      
+      forwarder.setTierForUser(userId, 'LOW');
+      
+      const result = forwarder.selectTierFor(userId);
+      expect(result).toBe('LOW');
+    });
+  });
+
+  describe('getTier', () => {
+    test('Test 24: Returns current tier for meeting', async () => {
+      const meetingId = 'meeting1';
+      
+      await forwarder.setTier(meetingId, 'MEDIUM');
+      
+      const result = forwarder.getTier(meetingId);
+      expect(result).toBe('MEDIUM');
+    });
+
+    test('Test 25: Returns HIGH as default for non-existent meeting', () => {
+      const result = forwarder.getTier('nonexistent');
+      expect(result).toBe('HIGH');
+    });
+  });
+
+  describe('getStats', () => {
+    test('Test 26: Returns empty stats initially', () => {
+      const stats = forwarder.getStats();
+      
+      expect(stats).toEqual({
+        activeMeetings: 0,
+        meetings: [],
+        userTiers: 0
+      });
+    });
+
+    test('Test 27: Returns stats with active meetings', async () => {
+      await forwarder.setTier('meeting1', 'LOW');
+      await forwarder.setTier('meeting2', 'MEDIUM');
+      await forwarder.setTier('meeting3', 'HIGH');
+      
+      const stats = forwarder.getStats();
+      
+      expect(stats.activeMeetings).toBe(3);
+      expect(stats.meetings).toHaveLength(3);
+      expect(stats.meetings).toEqual(
+        expect.arrayContaining([
+          { meetingId: 'meeting1', tier: 'LOW' },
+          { meetingId: 'meeting2', tier: 'MEDIUM' },
+          { meetingId: 'meeting3', tier: 'HIGH' }
+        ])
+      );
+    });
+
+    test('Test 28: Returns stats with user tiers', () => {
+      forwarder.setTierForUser('user1', 'LOW');
+      forwarder.setTierForUser('user2', 'MEDIUM');
+      
+      const stats = forwarder.getStats();
+      
+      expect(stats.userTiers).toBe(2);
+    });
+
+    test('Test 29: Returns combined stats with both meetings and user tiers', async () => {
+      await forwarder.setTier('meeting1', 'LOW');
+      forwarder.setTierForUser('user1', 'MEDIUM');
+      
+      const stats = forwarder.getStats();
+      
+      expect(stats.activeMeetings).toBe(1);
+      expect(stats.meetings).toEqual([{ meetingId: 'meeting1', tier: 'LOW' }]);
+      expect(stats.userTiers).toBe(1);
+    });
+  });
+
+  describe('setTier - error handling', () => {
+    test('Test 30: Handles error when setPreferredLayers fails', async () => {
+      const meetingId = 'meeting1';
+      const tier = 'LOW';
+      const recipients = [createUserSession('user1')];
+      const errorMessage = 'Failed to set preferred layers';
+      
+      // Create a mock consumer that rejects
+      const consumer = createMockConsumer('consumer1');
+      consumer.setPreferredLayers.mockRejectedValue(new Error(errorMessage));
+      
+      mockRegistry.listRecipients.mockReturnValue(recipients);
+      mockMediasoup.getConsumersForUser.mockReturnValue([consumer] as any);
+      
+      await forwarder.setTier(meetingId, tier);
+      
+      // Should log error
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[StreamForwarder] Error setting layers for consumer consumer1:',
+        expect.any(Error)
+      );
+    });
+
+    test('Test 31: Continues processing other consumers when one fails', async () => {
+      const meetingId = 'meeting1';
+      const tier = 'MEDIUM';
+      const recipients = [createUserSession('user1')];
+      
+      // Create two consumers: one that fails, one that succeeds
+      const consumer1 = createMockConsumer('consumer1');
+      const consumer2 = createMockConsumer('consumer2');
+      consumer1.setPreferredLayers.mockRejectedValue(new Error('Error 1'));
+      consumer2.setPreferredLayers.mockResolvedValue(undefined);
+      
+      mockRegistry.listRecipients.mockReturnValue(recipients);
+      mockMediasoup.getConsumersForUser.mockReturnValue([consumer1, consumer2] as any);
+      
+      await forwarder.setTier(meetingId, tier);
+      
+      // Both should have been called despite first one failing
+      expect(consumer1.setPreferredLayers).toHaveBeenCalledWith({ spatialLayer: 1 });
+      expect(consumer2.setPreferredLayers).toHaveBeenCalledWith({ spatialLayer: 1 });
+      
+      // Should log error for failed consumer
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[StreamForwarder] Error setting layers for consumer consumer1:',
+        expect.any(Error)
+      );
+      
+      // Should log success for successful consumer
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        '[StreamForwarder] Updated consumer consumer2 to layer 1 (tier MEDIUM)'
+      );
     });
   });
 });
