@@ -38,7 +38,6 @@ type MessageCallback<T> = (message: T) => void;
 
 export class SignalingClient {
   private ws: WebSocket | null = null;
-  private url: string = '';
   
   // Event callbacks
   private answerCallbacks: MessageCallback<string>[] = [];
@@ -55,8 +54,6 @@ export class SignalingClient {
    * From dev_specs/public_interfaces.md line 20: WebSocket endpoint
    */
   connect(url: string): Promise<void> {
-    this.url = url;
-
     return new Promise((resolve, reject) => {
       try {
         this.ws = new WebSocket(url);

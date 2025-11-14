@@ -230,7 +230,7 @@ export class UserClient {
           // In a real implementation, we'd get this from signaling or RTP stats
           // For now, we'll use a placeholder - this should be improved to get actual senderUserId
           const trackId = event.track.id;
-          const senderUserId = this.extractSenderUserIdFromTrack(trackId, event.streams);
+          const senderUserId = this.extractSenderUserIdFromTrack(trackId, Array.from(event.streams));
           
           if (senderUserId) {
             this.startReceiverFingerprintSending(senderUserId);
@@ -586,7 +586,7 @@ export class UserClient {
       const stats = await this.peerConnection.getStats();
       // Extract RTP timestamp from stats
       // WebRTC stats structure: Map<string, RTCStats>
-      for (const [id, stat] of stats.entries()) {
+      for (const [_id, stat] of stats.entries()) {
         if (stat.type === 'outbound-rtp') {
           // RTP timestamp is available in outbound-rtp stats
           // Note: Actual implementation will depend on WebRTC stats structure
@@ -735,7 +735,7 @@ export class UserClient {
     try {
       const stats = await this.peerConnection.getStats();
       // Extract RTP timestamp from inbound-rtp stats
-      for (const [id, stat] of stats.entries()) {
+      for (const [_id, stat] of stats.entries()) {
         if (stat.type === 'inbound-rtp') {
           // RTP timestamp is available in inbound-rtp stats
           // Note: Actual implementation will depend on WebRTC stats structure
@@ -762,7 +762,7 @@ export class UserClient {
    * 
    * For now, we'll use a placeholder approach
    */
-  private extractSenderUserIdFromTrack(trackId: string, streams: MediaStream[]): string | null {
+  private extractSenderUserIdFromTrack(_trackId: string, _streams: MediaStream[]): string | null {
     // TODO: Implement proper senderUserId extraction
     // For now, we'll use a simple approach:
     // - Check if we have participant info from signaling
@@ -782,6 +782,7 @@ export class UserClient {
   /**
    * Stop sending receiver fingerprints for a specific sender
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private stopReceiverFingerprintSending(senderUserId: string): void {
     const senderInfo = this.activeSenders.get(senderUserId);
     if (senderInfo) {
@@ -998,7 +999,7 @@ export class UserClient {
       // Try to find remote-inbound-rtp for RTT
       for (const [_, stat] of stats.entries()) {
         if (stat.type === 'remote-inbound-rtp' && stat.kind === 'audio') {
-          const remoteInbound = stat as RTCRemoteInboundRtpStreamStats;
+          const remoteInbound = stat as any;
           if (remoteInbound.roundTripTime !== undefined) {
             rttMs = remoteInbound.roundTripTime * 1000; // Convert to milliseconds
             break;
