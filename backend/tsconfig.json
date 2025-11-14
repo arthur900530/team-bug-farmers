@@ -48,5 +48,12 @@
     "noImplicitAny": true,
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "server-test.js"]
+  "exclude": [
+    "node_modules", 
+    "dist", 
+    "server-test.js",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/tests/**",
+  ]
 }
