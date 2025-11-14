@@ -10,7 +10,6 @@
  *  through the server to other participants"
  */
 
-import React from 'react';
 import type { ConnectionState } from '../../types';
 
 interface ServerAudioIndicatorProps {

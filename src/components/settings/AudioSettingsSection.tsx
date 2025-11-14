@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Mic, Volume2 } from 'lucide-react';
 import { FormSelect } from '../common/FormSelect';
 

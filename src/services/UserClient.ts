@@ -779,18 +779,6 @@ export class UserClient {
     return 'unknown-sender'; // Placeholder - should be replaced with actual senderUserId
   }
 
-  /**
-   * Stop sending receiver fingerprints for a specific sender
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private stopReceiverFingerprintSending(senderUserId: string): void {
-    const senderInfo = this.activeSenders.get(senderUserId);
-    if (senderInfo) {
-      clearInterval(senderInfo.receiverInterval);
-      this.activeSenders.delete(senderUserId);
-      console.log(`[UserClient] Stopped sending receiver fingerprints for sender: ${senderUserId}`);
-    }
-  }
 
   /**
    * Update connection state and notify listeners

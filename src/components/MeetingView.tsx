@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Users } from 'lucide-react';
 import { WindowControls } from './common/WindowControls';
 import { MeetingToolbar } from './meeting/MeetingToolbar';

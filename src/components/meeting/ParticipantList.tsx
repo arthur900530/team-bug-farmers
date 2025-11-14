@@ -1,5 +1,4 @@
-import React from 'react';
-import { Mic, MicOff, User, Signal, X } from 'lucide-react';
+import { User, Signal, X } from 'lucide-react';
 import type { UserSession } from '../../types';
 
 interface ParticipantListProps {

@@ -1,5 +1,4 @@
-import React from 'react';
-import { Signal, SignalHigh, SignalLow, SignalMedium } from 'lucide-react';
+import { SignalHigh, SignalLow, SignalMedium } from 'lucide-react';
 import type { QualityTier } from '../../types';
 
 interface QualityIndicatorProps {

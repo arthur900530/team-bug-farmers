@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Monitor, Smartphone, Settings, Check, X } from 'lucide-react';
 import { DraggableModal } from './common/DraggableModal';
 import { WindowControls } from './common/WindowControls';

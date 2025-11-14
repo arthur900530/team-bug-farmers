@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ZoomWorkspace } from './components/ZoomWorkspace';
 import { JoinMeetingModal } from './components/JoinMeetingModal';
 import { ConnectionErrorModal } from './components/ConnectionErrorModal';
@@ -28,7 +28,6 @@ export default function App() {
   const [cameraOn, setCameraOn] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
   const [micLocked, setMicLocked] = useState(false);
-  const [hasTriedConnecting, setHasTriedConnecting] = useState(false);
 
   // New state from Dev Spec
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -41,10 +40,6 @@ export default function App() {
   
   // UserClient instance for real backend connection
   const userClientRef = useRef<UserClient | null>(null);
-
-  const navigateToScreen = (screen: Screen) => {
-    setCurrentScreen(screen);
-  };
 
   const handleJoinMeeting = async (userId: string, meetingId: string, name: string) => {
     // Store user info
@@ -138,14 +133,12 @@ export default function App() {
       console.error('[App] Failed to join meeting:', error);
       setConnectionState('Disconnected');
       setCurrentScreen('connection-error');
-      setHasTriedConnecting(true);
     }
   };
 
   const handleRetryConnection = async () => {
     // Retry the connection with stored credentials
     if (currentUserId && currentMeetingId) {
-      setHasTriedConnecting(true); // Mark as retry attempt
       await handleJoinMeeting(currentUserId, currentMeetingId, displayName);
     }
   };

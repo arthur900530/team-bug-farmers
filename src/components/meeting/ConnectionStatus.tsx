@@ -1,4 +1,3 @@
-import React from 'react';
 import { Loader2, CheckCircle, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import type { ConnectionState } from '../../types';
 

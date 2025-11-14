@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Mic, MicOff, Video, VideoOff, ChevronDown } from 'lucide-react';
 import { WindowControls } from './common/WindowControls';
 

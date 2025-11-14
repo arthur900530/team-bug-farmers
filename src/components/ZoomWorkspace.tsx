@@ -1,4 +1,3 @@
-import React from 'react';
 import { Search, Home, Calendar, Users, FileText, MoreHorizontal, Bell, Settings } from 'lucide-react';
 
 export function ZoomWorkspace() {

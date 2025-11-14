@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, Volume2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Volume2 } from 'lucide-react';
 
 interface AudioSettingsProps {
   showFullSettings?: boolean;
@@ -10,7 +10,7 @@ interface AudioSettingsProps {
 
 export function AudioSettings({ 
   onNavigateToSettings, 
-  onClose 
+  onClose: _onClose 
 }: AudioSettingsProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });

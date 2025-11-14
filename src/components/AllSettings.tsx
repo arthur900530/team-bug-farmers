@@ -1,4 +1,3 @@
-import React from 'react';
 import { X } from 'lucide-react';
 import { DraggableModal } from './common/DraggableModal';
 import { WindowControls } from './common/WindowControls';
@@ -12,7 +11,7 @@ interface AllSettingsProps {
   onNavigateToScreenShare?: () => void;
 }
 
-export function AllSettings({ onClose, onNavigateToScreenShare }: AllSettingsProps) {
+export function AllSettings({ onClose, onNavigateToScreenShare: _onNavigateToScreenShare }: AllSettingsProps) {
   const handleSave = () => {
     try {
       console.log('Settings saved');

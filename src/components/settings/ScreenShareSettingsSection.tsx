@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Monitor } from 'lucide-react';
 
 export function ScreenShareSettingsSection() {

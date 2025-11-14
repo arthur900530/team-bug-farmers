@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Video } from 'lucide-react';
 import { FormSelect } from '../common/FormSelect';
 

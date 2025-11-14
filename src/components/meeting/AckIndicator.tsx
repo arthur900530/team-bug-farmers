@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 import type { AckSummary } from '../../types';
 

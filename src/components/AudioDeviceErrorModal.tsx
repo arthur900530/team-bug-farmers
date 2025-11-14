@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertTriangle, Headphones } from 'lucide-react';
 
 interface AudioDeviceErrorModalProps {
