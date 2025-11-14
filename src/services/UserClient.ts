@@ -105,8 +105,10 @@ export class UserClient {
       // From flow_charts.md line 24: "SignalingClient.connect"
       this.updateConnectionState('Connecting');
       
-      // TODO: Get WebSocket URL from config
-      const wsUrl = 'ws://localhost:8080';
+      // Get WebSocket URL from environment variable or default to localhost
+      // For production: Set VITE_WS_URL in AWS Amplify environment variables
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
+      console.log(`[UserClient] Connecting to WebSocket: ${wsUrl}`);
       await this.signalingClient.connect(wsUrl);
       
       // Step 2: Send JOIN message
