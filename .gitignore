@@ -47,3 +47,7 @@ coverage/
 .cache/
 .parcel-cache/
 .eslintcache
+
+# specstory
+.cursorindexingignore
+# .specstory/
