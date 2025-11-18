@@ -11,6 +11,9 @@
  * - StreamForwarder: Routes RTP packets (STUB - placeholder for mediasoup)
  */
 
+import http from 'http';
+import https from 'https';
+import fs from 'fs';
 import { SignalingServer } from './SignalingServer';
 import { MeetingRegistry } from './MeetingRegistry';
 import { MediasoupManager } from './MediasoupManager';
@@ -20,18 +23,54 @@ import { QualityController } from './QualityController';
 
 // Configuration
 const WS_PORT = parseInt(process.env.WS_PORT || '8080');
+const USE_SSL = process.env.USE_SSL === 'true';
+const SSL_CERT_PATH = process.env.SSL_CERT_PATH || './certs/cert.pem';
+const SSL_KEY_PATH = process.env.SSL_KEY_PATH || './certs/key.pem';
 
 // Initialize components
 console.log('===========================================');
 console.log('🚀 Starting WebRTC Signaling Server');
 console.log('===========================================');
 console.log(`WebSocket Port: ${WS_PORT}`);
+console.log(`SSL/TLS: ${USE_SSL ? 'Enabled' : 'Disabled'}`);
 console.log(`Implementation: User Story 11 - Initial Audio Connection`);
 console.log('===========================================');
 
 // Initialize components
 (async () => {
   try {
+    // Create HTTP or HTTPS server
+    let httpServer: http.Server | https.Server;
+    
+    if (USE_SSL) {
+      console.log('🔒 Configuring SSL/TLS...');
+      try {
+        // Check if certificate files exist
+        if (!fs.existsSync(SSL_CERT_PATH)) {
+          throw new Error(`SSL certificate not found at: ${SSL_CERT_PATH}`);
+        }
+        if (!fs.existsSync(SSL_KEY_PATH)) {
+          throw new Error(`SSL key not found at: ${SSL_KEY_PATH}`);
+        }
+        
+        const sslOptions = {
+          cert: fs.readFileSync(SSL_CERT_PATH),
+          key: fs.readFileSync(SSL_KEY_PATH)
+        };
+        httpServer = https.createServer(sslOptions);
+        console.log('✅ SSL certificates loaded successfully');
+        console.log(`   Certificate: ${SSL_CERT_PATH}`);
+        console.log(`   Key: ${SSL_KEY_PATH}`);
+      } catch (error) {
+        console.error('❌ Failed to load SSL certificates:', error);
+        console.error('   Falling back to HTTP (insecure)');
+        httpServer = http.createServer();
+      }
+    } else {
+      console.log('⚠️  Running without SSL (HTTP only - not recommended for production)');
+      httpServer = http.createServer();
+    }
+    
     // Create MeetingRegistry (from dev_specs/classes.md M2.2)
     const meetingRegistry = new MeetingRegistry();
 
@@ -54,7 +93,7 @@ console.log('===========================================');
 
     // Create SignalingServer (from dev_specs/classes.md M2.1)
     const signalingServer = new SignalingServer(
-      WS_PORT,
+      httpServer,
       meetingRegistry,
       mediasoupManager,
       streamForwarder,
@@ -62,14 +101,21 @@ console.log('===========================================');
       qualityController
     );
 
-    console.log('✅ Server ready for WebSocket connections');
-    console.log(`   Connect at: ws://localhost:${WS_PORT}`);
-    console.log('===========================================\n');
+    // Start HTTP/HTTPS server
+    httpServer.listen(WS_PORT, () => {
+      const protocol = USE_SSL ? 'wss' : 'ws';
+      console.log('✅ Server ready for WebSocket connections');
+      console.log(`   Connect at: ${protocol}://localhost:${WS_PORT}`);
+      console.log('===========================================\n');
+    });
 
     // Graceful shutdown
     const shutdown = async () => {
       console.log('\n[Server] Shutting down gracefully...');
       signalingServer.close();
+      httpServer.close(() => {
+        console.log('[Server] HTTP/HTTPS server closed');
+      });
       await mediasoupManager.shutdown();
       process.exit(0);
     };

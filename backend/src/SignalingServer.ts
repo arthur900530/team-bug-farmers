@@ -19,7 +19,8 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { IncomingMessage } from 'http';
+import { IncomingMessage, Server as HttpServer } from 'http';
+import { Server as HttpsServer } from 'https';
 import {
   ClientMessage,
   JoinMessage,
@@ -74,7 +75,7 @@ export class SignalingServer {
   private qualityEvaluationInterval: NodeJS.Timeout | null = null;
 
   constructor(
-    port: number,
+    server: HttpServer | HttpsServer,
     meetingRegistry: MeetingRegistry,
     mediasoupManager: MediasoupManager,
     streamForwarder: StreamForwarder,
@@ -154,14 +155,16 @@ export class SignalingServer {
     }, 5000);
 
     // From public_interfaces.md line 20: WebSocket over TLS
-    // For development, we'll use ws:// instead of wss://
-    this.wss = new WebSocketServer({ port });
+    // WebSocket server attached to HTTP/HTTPS server
+    // Supports both ws:// and wss:// depending on server configuration
+    this.wss = new WebSocketServer({ 
+      server,
+      perMessageDeflate: false  // Disable compression for lower latency
+    });
 
     this.wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
       this.handleConnection(ws, req);
     });
-
-    console.log(`[SignalingServer] WebSocket server started on port ${port}`);
   }
 
   /**
