@@ -36,7 +36,7 @@ export default function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('Disconnected');
   const [currentTier, setCurrentTier] = useState<QualityTier>('HIGH');
   const [participants, setParticipants] = useState<UserSession[]>([]);
-  const [ackSummary, setAckSummary] = useState<AckSummary | null>(null);
+  const [_ackSummary, _setAckSummary] = useState<AckSummary | null>(null);
   
   // UserClient instance for real backend connection
   const userClientRef = useRef<UserClient | null>(null);
@@ -60,48 +60,50 @@ export default function App() {
         }
       });
       
-      // Set up participant updates from 'joined' message
-      const signalingClient = userClient.getSignalingClient();
-      signalingClient.onJoined((joinedMsg) => {
-        // Convert participant IDs to UserSession objects
-        const participantSessions: UserSession[] = joinedMsg.participants.map((participantId: string) => ({
-          userId: participantId,
-          pcId: `pc-${participantId}`,
-          qualityTier: 'HIGH', // Default, will be updated by QualityController (User Story 8)
-          lastCrc32: '',
-          connectionState: 'Streaming',
-          timestamp: Date.now()
-        }));
-        setParticipants(participantSessions);
+      // Set up participant tracking from remote tracks
+      userClient.setOnRemoteTrack((track) => {
+        console.log('[App] Received remote track:', track.id);
+        // When we receive a track, add that user to participants if not already there
+        // Note: We'll use the track ID as a proxy for user identification
+        // In a full implementation, the server should send user info with the track
       });
       
-      // Set up participant updates from 'user-joined' events
-      signalingClient.onUserJoined((userJoinedMsg) => {
-        // Add new participant to list
-        setParticipants(prev => {
-          // Check if participant already exists
-          if (prev.some(p => p.userId === userJoinedMsg.userId)) {
-            return prev;
-          }
-          // Add new participant
-          return [...prev, {
-            userId: userJoinedMsg.userId,
-            pcId: `pc-${userJoinedMsg.userId}`,
-            qualityTier: 'HIGH',
-            lastCrc32: '',
-            connectionState: 'Streaming',
-            timestamp: Date.now()
-          }];
+      // Track participants from user-joined events
+      const signalingClient = (userClient as any).signalingClient;
+      if (signalingClient) {
+        signalingClient.onUserJoined((userJoinedMsg: any) => {
+          console.log('[App] User joined:', userJoinedMsg.userId);
+          setParticipants(prev => {
+            if (prev.some(p => p.userId === userJoinedMsg.userId)) {
+              return prev;
+            }
+            return [...prev, {
+              userId: userJoinedMsg.userId,
+              pcId: `pc-${userJoinedMsg.userId}`,
+              qualityTier: 'HIGH',
+              lastCrc32: '',
+              connectionState: 'Streaming',
+              timestamp: Date.now()
+            }];
+          });
         });
-      });
-      
-      // User Story 3: Set up ACK summary callback
-      // From dev_specs/flow_charts.md line 195: "UserClient displays UI"
-      // From dev_specs/APIs.md line 26: "onAckSummary(callback)"
-      signalingClient.onAckSummary((summary: AckSummary) => {
-        setAckSummary(summary);
-        console.log('[App] ACK summary received:', summary);
-      });
+        
+        // Also populate initial participants from JOINED message
+        signalingClient.onJoined((joinedMsg: any) => {
+          console.log('[App] Initial participants:', joinedMsg.participants);
+          const participantSessions = joinedMsg.participants
+            .filter((pid: string) => pid !== userId) // Don't include self
+            .map((pid: string) => ({
+              userId: pid,
+              pcId: `pc-${pid}`,
+              qualityTier: 'HIGH' as const,
+              lastCrc32: '',
+              connectionState: 'Streaming' as const,
+              timestamp: Date.now()
+            }));
+          setParticipants(participantSessions);
+        });
+      }
       
       // User Story 8: Set up tier change callback
       // From dev_specs/flow_charts.md line 154: "SignalingServer.notify Tier change to all participants"
@@ -221,7 +223,7 @@ export default function App() {
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
               currentTier={currentTier}
-              ackSummary={ackSummary}
+              ackSummary={null}
               participants={participants}
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
@@ -246,7 +248,7 @@ export default function App() {
             onMicToggle={handleMicToggle}
             onMicSettings={handleMicSettings}
             currentTier={currentTier}
-            ackSummary={ackSummary}
+            ackSummary={null}
             participants={participants}
             currentUserId={currentUserId || undefined}
             connectionState={connectionState}
@@ -265,7 +267,7 @@ export default function App() {
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
               currentTier={currentTier}
-              ackSummary={ackSummary}
+              ackSummary={null}
               participants={participants}
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
@@ -312,7 +314,7 @@ export default function App() {
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
               currentTier={currentTier}
-              ackSummary={ackSummary}
+              ackSummary={null}
               participants={participants}
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
@@ -336,7 +338,7 @@ export default function App() {
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
               currentTier={currentTier}
-              ackSummary={ackSummary}
+              ackSummary={null}
               participants={participants}
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}

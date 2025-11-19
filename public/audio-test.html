@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Test - Direct mediasoup-client</title>
+    <script src="https://cdn.jsdelivr.net/npm/mediasoup-client@3/build/mediasoup-client.min.js"></script>
+    <style>
+        body { 
+            font-family: Arial; 
+            padding: 20px; 
+            background: #1a1a1a; 
+            color: white;
+        }
+        button { 
+            padding: 10px 20px; 
+            margin: 10px; 
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .log { 
+            background: #2a2a2a; 
+            padding: 10px; 
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .info { color: #60a5fa; }
+    </style>
+</head>
+<body>
+    <h1>🎤 Simple Audio Test</h1>
+    <p>This tests mediasoup-client audio directly without any UI complexity.</p>
+    
+    <div>
+        <input id="userId" placeholder="Your User ID" value="User1" />
+        <input id="meetingId" placeholder="Meeting ID" value="test" />
+        <button onclick="join()">Join & Start Audio</button>
+    </div>
+    
+    <div class="log" id="log"></div>
+    
+    <script>
+        const ws_url = 'ws://localhost:8080';
+        let ws, device, sendTransport, recvTransport, producer;
+        
+        function log(msg, type = 'info') {
+            const el = document.getElementById('log');
+            const span = document.createElement('div');
+            span.className = type;
+            span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            el.appendChild(span);
+            el.scrollTop = el.scrollHeight;
+            console.log(msg);
+        }
+        
+        async function join() {
+            try {
+                const userId = document.getElementById('userId').value;
+                const meetingId = document.getElementById('meetingId').value;
+                
+                log('🔌 Connecting to WebSocket...', 'info');
+                ws = new WebSocket(ws_url);
+                
+                ws.onopen = async () => {
+                    log('✅ WebSocket connected', 'success');
+                    
+                    // Join meeting
+                    ws.send(JSON.stringify({ type: 'join', userId, meetingId, displayName: userId }));
+                    log(`📤 Sent JOIN (user: ${userId}, meeting: ${meetingId})`, 'info');
+                };
+                
+                ws.onmessage = async (event) => {
+                    const msg = JSON.parse(event.data);
+                    log(`📥 Received: ${msg.type}`, 'info');
+                    
+                    if (msg.type === 'joined') {
+                        log('✅ Joined meeting!', 'success');
+                        await setupMediasoup();
+                    } else if (msg.type === 'routerRtpCapabilities') {
+                        log('📋 Got router capabilities', 'success');
+                        await device.load({ routerRtpCapabilities: msg.rtpCapabilities });
+                        log('✅ Device loaded', 'success');
+                        await createSendTransport();
+                    } else if (msg.type === 'webRtcTransportCreated') {
+                        handleTransportCreated(msg);
+                    } else if (msg.type === 'webRtcTransportConnected') {
+                        log('✅ Transport connected', 'success');
+                    } else if (msg.type === 'produced') {
+                        log(`✅ Producer created: ${msg.id}`, 'success');
+                    } else if (msg.type === 'newProducer') {
+                        log(`🎤 New producer from ${msg.producerUserId}`, 'info');
+                        await consumeAudio(msg.producerUserId);
+                    } else if (msg.type === 'consumed') {
+                        handleConsumed(msg);
+                    }
+                };
+                
+                ws.onerror = (err) => log(`❌ WebSocket error: ${err}`, 'error');
+                
+            } catch (err) {
+                log(`❌ Error: ${err.message}`, 'error');
+            }
+        }
+        
+        async function setupMediasoup() {
+            log('🎧 Creating mediasoup Device...', 'info');
+            device = new mediasoupClient.Device();
+            
+            // Request router capabilities
+            ws.send(JSON.stringify({ type: 'getRouterRtpCapabilities' }));
+        }
+        
+        let pendingTransportResolve;
+        function handleTransportCreated(msg) {
+            if (pendingTransportResolve) {
+                pendingTransportResolve(msg);
+                pendingTransportResolve = null;
+            }
+        }
+        
+        async function createSendTransport() {
+            log('📤 Creating send transport...', 'info');
+            
+            // Request transport
+            ws.send(JSON.stringify({ type: 'createWebRtcTransport' }));
+            
+            // Wait for response
+            const transportParams = await new Promise(resolve => {
+                pendingTransportResolve = resolve;
+            });
+            
+            sendTransport = device.createSendTransport({
+                id: transportParams.transportId,
+                iceParameters: transportParams.iceParameters,
+                iceCandidates: transportParams.iceCandidates,
+                dtlsParameters: transportParams.dtlsParameters
+            });
+            
+            sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+                try {
+                    log('🔗 Connecting send transport...', 'info');
+                    ws.send(JSON.stringify({ type: 'connectWebRtcTransport', dtlsParameters }));
+                    // Wait for confirmation
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    callback();
+                } catch (err) {
+                    errback(err);
+                }
+            });
+            
+            sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
+                try {
+                    log(`🎤 Producing ${kind}...`, 'info');
+                    ws.send(JSON.stringify({ type: 'produce', kind, rtpParameters }));
+                    // Wait for producer ID
+                    const producerId = await new Promise(resolve => {
+                        const handler = (event) => {
+                            const msg = JSON.parse(event.data);
+                            if (msg.type === 'produced') {
+                                ws.removeEventListener('message', handler);
+                                resolve(msg.id);
+                            }
+                        };
+                        ws.addEventListener('message', handler);
+                    });
+                    callback({ id: producerId });
+                } catch (err) {
+                    errback(err);
+                }
+            });
+            
+            // Start producing audio
+            await produceAudio();
+        }
+        
+        async function produceAudio() {
+            log('🎤 Getting microphone...', 'info');
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const audioTrack = stream.getAudioTracks()[0];
+            log('✅ Got microphone', 'success');
+            
+            producer = await sendTransport.produce({ track: audioTrack });
+            log('✅ Started producing audio!', 'success');
+        }
+        
+        async function consumeAudio(producerUserId) {
+            log(`📥 Consuming audio from ${producerUserId}...`, 'info');
+            
+            if (!recvTransport) {
+                log('📥 Creating receive transport...', 'info');
+                
+                // Request transport
+                ws.send(JSON.stringify({ type: 'createWebRtcTransport' }));
+                
+                const transportParams = await new Promise(resolve => {
+                    pendingTransportResolve = resolve;
+                });
+                
+                recvTransport = device.createRecvTransport({
+                    id: transportParams.transportId,
+                    iceParameters: transportParams.iceParameters,
+                    iceCandidates: transportParams.iceCandidates,
+                    dtlsParameters: transportParams.dtlsParameters
+                });
+                
+                recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+                    try {
+                        log('🔗 Connecting receive transport...', 'info');
+                        ws.send(JSON.stringify({ type: 'connectWebRtcTransport', dtlsParameters }));
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        callback();
+                    } catch (err) {
+                        errback(err);
+                    }
+                });
+                
+                log('✅ Receive transport created', 'success');
+            }
+            
+            // Request to consume
+            ws.send(JSON.stringify({ 
+                type: 'consume', 
+                producerUserId,
+                rtpCapabilities: device.rtpCapabilities 
+            }));
+        }
+        
+        async function handleConsumed(msg) {
+            log(`🎧 Creating consumer...`, 'info');
+            
+            const consumer = await recvTransport.consume({
+                id: msg.id,
+                producerId: msg.producerId,
+                kind: msg.kind,
+                rtpParameters: msg.rtpParameters
+            });
+            
+            log(`✅ Consumer created!`, 'success');
+            log(`🎵 Track: ${consumer.track.kind}, ID: ${consumer.track.id}`, 'info');
+            
+            // Resume consumer
+            ws.send(JSON.stringify({ type: 'resumeConsumer', consumerId: consumer.id }));
+            
+            // PLAY THE AUDIO!
+            const audioEl = new Audio();
+            audioEl.srcObject = new MediaStream([consumer.track]);
+            audioEl.autoplay = true;
+            audioEl.play().then(() => {
+                log('🔊🔊🔊 AUDIO PLAYING! 🔊🔊🔊', 'success');
+            }).catch(err => {
+                log(`❌ Audio play error: ${err.message}`, 'error');
+            });
+        }
+    </script>
+</body>
+</html>
+

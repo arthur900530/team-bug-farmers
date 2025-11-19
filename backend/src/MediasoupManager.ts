@@ -285,6 +285,18 @@ export class MediasoupManager {
   }
 
   /**
+   * Get Router RTP capabilities
+   * These capabilities define what codecs/formats the router supports
+   * Clients should use these exact capabilities to ensure compatibility
+   */
+  getRouterRtpCapabilities(): any {
+    if (!this.router) {
+      throw new Error('Router not initialized');
+    }
+    return this.router.rtpCapabilities;
+  }
+
+  /**
    * Get Producer for a user
    */
   getProducer(userId: string): Producer | undefined {
@@ -305,17 +317,6 @@ export class MediasoupManager {
    */
   getAllProducers(): Producer[] {
     return Array.from(this.producers.values());
-  }
-
-  /**
-   * Get Router RTP capabilities
-   * Needed for client to generate offer
-   */
-  getRouterRtpCapabilities(): any {
-    if (!this.router) {
-      throw new Error('Router not initialized');
-    }
-    return this.router.rtpCapabilities;
   }
 
   /**

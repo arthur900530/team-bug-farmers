@@ -47,6 +47,14 @@ export class SignalingClient {
   private joinedCallbacks: MessageCallback<JoinedMessage>[] = [];
   private userJoinedCallbacks: MessageCallback<{ type: 'user-joined'; userId: string }>[] = [];
   private errorCallbacks: MessageCallback<ErrorMessage>[] = [];
+  
+  // mediasoup-client callbacks (public for MediasoupClient)
+  public onRouterCapabilities?: (rtpCapabilities: any) => void;
+  public onTransportCreated?: (params: any) => void;
+  public onTransportConnected?: () => void;
+  public onProduced?: (producerId: string) => void;
+  public onConsumed?: (params: any) => void;
+  public onNewProducer?: (producerUserId: string, producerId: string) => void;
 
   /**
    * Connect to WebSocket signaling server
@@ -101,6 +109,17 @@ export class SignalingClient {
           this.userJoinedCallbacks.forEach(cb => cb(userJoinedMsg));
           break;
 
+        case 'new-track':
+          // Notification that a new mediasoup Consumer has been created
+          console.log(`[SignalingClient] 🔔🔔🔔 NEW TRACK notification: from ${message.senderUserId}, consumerId ${message.consumerId}`);
+          if (message.rtpParameters) {
+            console.log(`[SignalingClient] RTP Parameters received:`, message.rtpParameters);
+            console.log(`[SignalingClient] SSRC: ${message.rtpParameters.encodings?.[0]?.ssrc || 'unknown'}`);
+            // TODO: Use these RTP parameters to configure receiving
+            // For now, log them for debugging
+          }
+          break;
+
         case 'offer':
           // Not typically received by the offerer in User Story 11
           break;
@@ -139,6 +158,44 @@ export class SignalingClient {
           const errorMsg = message as ErrorMessage;
           console.error('[SignalingClient] Server error:', errorMsg.message);
           this.errorCallbacks.forEach(cb => cb(errorMsg));
+          break;
+
+        // mediasoup-client protocol messages
+        case 'routerRtpCapabilities':
+          if (this.onRouterCapabilities) {
+            this.onRouterCapabilities(message.rtpCapabilities);
+          }
+          break;
+
+        case 'webRtcTransportCreated':
+          if (this.onTransportCreated) {
+            this.onTransportCreated(message);
+          }
+          break;
+
+        case 'webRtcTransportConnected':
+          if (this.onTransportConnected) {
+            this.onTransportConnected();
+          }
+          break;
+
+        case 'produced':
+          if (this.onProduced) {
+            this.onProduced(message.id || message.producerId);
+          }
+          break;
+
+        case 'consumed':
+          if (this.onConsumed) {
+            this.onConsumed(message);
+          }
+          break;
+
+        case 'newProducer':
+          console.log(`[SignalingClient] 🎤 New producer: ${message.producerId} from user ${message.producerUserId}`);
+          if (this.onNewProducer) {
+            this.onNewProducer(message.producerUserId, message.producerId);
+          }
           break;
 
         default:
@@ -302,8 +359,9 @@ export class SignalingClient {
 
   /**
    * Send message via WebSocket
+   * Made public for MediasoupClient to use
    */
-  private send(message: any): void {
+  send(message: any): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {

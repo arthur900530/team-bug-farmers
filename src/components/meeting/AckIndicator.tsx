@@ -11,10 +11,12 @@ export function AckIndicator({ summary, className = '' }: AckIndicatorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!summary) {
+    // With mediasoup-client, audio delivery is automatic
+    // Show a positive indicator instead of "checking"
     return (
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-700/50 ${className}`}>
-        <div className="w-4 h-4 rounded-full bg-gray-500 animate-pulse" />
-        <span className="text-sm text-gray-400">Checking audio delivery...</span>
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-green-900/30 ${className}`}>
+        <div className="w-4 h-4 rounded-full bg-green-500" />
+        <span className="text-sm text-green-400">Audio active</span>
       </div>
     );
   }

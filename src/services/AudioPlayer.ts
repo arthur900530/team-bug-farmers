@@ -114,12 +114,28 @@ export class AudioPlayer implements AudioProcessor {
       // Play audio element
       try {
         await this.audioElement.play();
-        console.log('[AudioPlayer] Audio playback started successfully');
+        console.log('[AudioPlayer] ✅ Audio playback started successfully');
         console.log(`[AudioPlayer] Sample rate: ${this.audioContext.sampleRate} Hz`);
+        console.log(`[AudioPlayer] AudioContext state: ${this.audioContext.state}`);
+        console.log(`[AudioPlayer] Audio element paused: ${this.audioElement.paused}`);
+        console.log(`[AudioPlayer] Audio element volume: ${this.audioElement.volume}`);
+        console.log(`[AudioPlayer] Audio element muted: ${this.audioElement.muted}`);
+        
+        // CRITICAL: Check if AudioContext is suspended
+        if (this.audioContext.state === 'suspended') {
+          console.warn('[AudioPlayer] ⚠️ AudioContext is SUSPENDED! Attempting to resume...');
+          await this.audioContext.resume();
+          console.log(`[AudioPlayer] AudioContext resumed: ${this.audioContext.state}`);
+        }
+        
         this.isPlaying = true;
+        
+        // Monitor audio data flowing through
+        this.monitorAudioLevels();
+        
       } catch (playError) {
-        console.warn('[AudioPlayer] Autoplay prevented, user interaction required:', playError);
-        // Audio will play when user interacts with page
+        console.error('[AudioPlayer] ❌ Autoplay prevented:', playError);
+        console.warn('[AudioPlayer] User interaction may be required. Try clicking anywhere on the page.');
       }
 
       // Monitor track state changes
@@ -140,6 +156,34 @@ export class AudioPlayer implements AudioProcessor {
       console.error('[AudioPlayer] Failed to start playback:', error);
       throw error;
     }
+  }
+
+  /**
+   * Monitor audio levels to verify audio is flowing
+   */
+  private monitorAudioLevels(): void {
+    if (!this.analyserNode) return;
+    
+    const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
+    let checkCount = 0;
+    
+    const checkAudio = () => {
+      if (!this.analyserNode || checkCount > 10) return;
+      
+      this.analyserNode.getByteFrequencyData(dataArray);
+      const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      
+      if (checkCount < 5 || average > 0) {
+        console.log(`[AudioPlayer] Audio level check ${checkCount + 1}: ${average.toFixed(2)} (${average > 0 ? '🔊 AUDIO DETECTED' : '🔇 silence'})`);
+      }
+      
+      checkCount++;
+      if (checkCount <= 10) {
+        setTimeout(checkAudio, 1000);
+      }
+    };
+    
+    setTimeout(checkAudio, 500);
   }
 
   /**
