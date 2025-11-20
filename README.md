@@ -1,9 +1,19 @@
 # Team Bug Farmers - WebRTC Audio Conference Demo
 
-A modern, real-time audio conferencing application built with React and TypeScript, featuring adaptive quality control, audio delivery verification, and comprehensive participant management.
+A modern, real-time audio conferencing application built with React, TypeScript, and mediasoup SFU, featuring adaptive quality control, audio delivery verification, and comprehensive participant management.
 
 [![Run Frontend Tests](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-frontend-tests.yml/badge.svg)](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-frontend-tests.yml)
 [![Run Backend Tests](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-backend-tests.yml/badge.svg)](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-backend-tests.yml)
+
+## 🚀 What Makes This Special
+
+- **🎙️ Real-time Audio Conferencing**: Built with mediasoup SFU for scalable, low-latency audio
+- **📊 Adaptive Quality Control**: Automatically adjusts bitrate based on network conditions
+- **✅ Audio Delivery Verification**: CRC32 fingerprinting to verify audio reception
+- **🎨 Modern UI**: Beautiful, accessible interface with Radix UI and Tailwind CSS
+- **📡 Full-Stack TypeScript**: End-to-end type safety from client to server
+- **☁️ Production Deployed**: Live on AWS (EC2 + Amplify) with SSL/TLS encryption
+- **🔧 Production-Ready Architecture**: Modular, testable, and well-documented
 
 ---
 
@@ -59,26 +69,187 @@ This application implements three core user stories for reliable real-time audio
 2. **Install dependencies**
    ```bash
    npm install
+   cd backend && npm install && cd ..
    ```
 
-3. **Start the development server**
-   ```bash
-   npm run dev
-   ```
+### Running the Application
 
-4. **Open your browser**
-   ```
-   http://localhost:5173
-   ```
+You need to run **both backend and frontend** servers:
+
+#### **Terminal 1 - Backend Server**
+```bash
+cd backend
+npm run build
+WS_PORT=8080 USE_SSL=false npm start
+```
+
+#### **Terminal 2 - Frontend Server**
+```bash
+VITE_WS_URL=ws://localhost:8080 npm run dev
+```
+
+#### **Access the Application (Local Development)**
+
+- **Main App**: http://localhost:5173 (or http://localhost:5174 if 5173 is in use)
+- **Simple Audio Test**: http://localhost:5173/audio-test.html
+
+---
+
+## 🌐 Production Deployment
+
+The application is deployed in production on AWS infrastructure:
+
+### **Live Application**
+
+- **Frontend (AWS Amplify)**: Hosted on AWS Amplify with automatic CI/CD from GitHub
+- **Backend (AWS EC2)**: Running on EC2 instance with SSL/TLS encryption
+
+### **Backend Deployment (EC2 + PM2)**
+
+The backend is deployed on AWS EC2 and managed with PM2 for process management and auto-restart.
+
+#### **PM2 Commands**
+
+```bash
+# Start the backend with PM2
+cd backend
+npm run build
+pm2 start dist/server.js --name "webrtc-backend" -i 1
+
+# View logs
+pm2 logs webrtc-backend
+
+# Monitor status
+pm2 status
+
+# Restart the backend
+pm2 restart webrtc-backend
+
+# Stop the backend
+pm2 stop webrtc-backend
+
+# Delete from PM2
+pm2 delete webrtc-backend
+
+# Save PM2 configuration (persist across reboots)
+pm2 save
+pm2 startup
+```
+
+#### **SSL/TLS Configuration**
+
+The EC2 instance is configured with:
+- **SSL Certificates**: Let's Encrypt or AWS Certificate Manager
+- **Secure WebSocket**: `wss://` (WebSocket Secure) for encrypted signaling
+- **HTTPS**: Backend health endpoints served over HTTPS
+- **Auto-renewal**: Certificate auto-renewal configured
+
+#### **Environment Variables (Production)**
+
+Set these on the EC2 instance:
+
+```bash
+# Backend Configuration
+export WS_PORT=8080
+export USE_SSL=true
+export SSL_CERT_PATH=/path/to/cert.pem
+export SSL_KEY_PATH=/path/to/key.pem
+```
+
+### **Frontend Deployment (AWS Amplify)**
+
+The frontend is automatically deployed to AWS Amplify:
+
+1. **GitHub Integration**: Automatic builds on push to `main` branch
+2. **Build Settings**: Vite build configuration optimized for production
+3. **Environment Variables**: `VITE_WS_URL` configured to point to backend WSS URL
+4. **CDN Distribution**: Global content delivery via AWS CloudFront
+5. **HTTPS**: Automatic SSL certificate and HTTPS enforcement
+
+#### **Amplify Build Configuration**
+
+```yaml
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm install
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+```
+
+### **Production Architecture**
+
+```
+┌─────────────────────────────────────────────────────┐
+│          Users (Browser Clients)                    │
+└─────────────────────┬───────────────────────────────┘
+                      │
+        ┌─────────────┴──────────────┐
+        │                            │
+   HTTPS/WSS                     HTTPS/WSS
+        │                            │
+┌───────▼──────────┐        ┌────────▼────────────┐
+│  AWS Amplify     │        │    AWS EC2          │
+│  (Frontend)      │        │    (Backend)        │
+│  • React App     │        │    • Node.js        │
+│  • CloudFront    │        │    • mediasoup      │
+│  • Auto-deploy   │        │    • PM2 managed    │
+│  • SSL enabled   │        │    • SSL/TLS        │
+└──────────────────┘        └─────────────────────┘
+```
+
+### **Deployment Checklist**
+
+#### Backend (EC2) Deployment
+- [ ] Launch EC2 instance (Ubuntu 20.04+ recommended)
+- [ ] Install Node.js 18+ and npm
+- [ ] Install PM2 globally: `npm install -g pm2`
+- [ ] Clone repository and install dependencies
+- [ ] Configure SSL certificates (Let's Encrypt recommended)
+- [ ] Set environment variables (`WS_PORT`, `USE_SSL`, cert paths)
+- [ ] Build backend: `npm run build`
+- [ ] Start with PM2: `pm2 start dist/server.js --name webrtc-backend`
+- [ ] Save PM2 config: `pm2 save && pm2 startup`
+- [ ] Configure security group (allow ports 8080, 443, 22)
+- [ ] Test WebSocket connection: `wscat -c wss://your-domain:8080`
+
+#### Frontend (Amplify) Deployment
+- [ ] Connect GitHub repository to AWS Amplify
+- [ ] Configure build settings (see Amplify Build Configuration above)
+- [ ] Set environment variable: `VITE_WS_URL=wss://your-backend-domain:8080`
+- [ ] Enable automatic deployments from `main` branch
+- [ ] Add custom domain (optional)
+- [ ] Verify HTTPS is enabled
+- [ ] Test connection to backend from deployed frontend
+
+---
 
 ### Available Scripts
 
+#### Frontend Scripts
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server with hot reload |
-| `npm run build` | Build for production (TypeScript + Vite) |
-| `npm run preview` | Preview production build locally |
+| `npm run dev` | Start frontend development server with hot reload |
+| `npm run build` | Build frontend for production (TypeScript + Vite) |
+| `npm run preview` | Preview frontend production build locally |
 | `npm run lint` | Run ESLint to check code quality |
+
+#### Backend Scripts
+| Command | Description |
+|---------|-------------|
+| `npm run build` | Build backend TypeScript to JavaScript |
+| `npm start` | Start backend WebSocket server |
+| `npm run dev` | Start backend with hot reload (development) |
 
 ---
 
@@ -137,26 +308,37 @@ Each command above runs synchronously and prints results to your terminal.
 
 | Technology | Purpose |
 |------------|---------|
-| **WebRTC** | Peer-to-peer media foundation (ICE, DTLS, SRTP) |
+| **WebRTC** | Real-time media transport (ICE, DTLS, SRTP) |
+| **mediasoup-client** | Client-side Device API for SFU integration |
 | **Web Audio API** | Microphone capture and speaker playback |
-| **Opus Codec** | High-quality audio encoding (16/32/64 kbps) |
+| **Opus Codec** | High-quality audio encoding (48kHz) |
 | **RTP/RTCP** | Real-time transport and quality feedback |
 
-### **Backend (Planned)**
+### **Backend (Implemented)**
 
-| Technology | Purpose |
-|------------|---------|
-| **Node.js** | Signaling server runtime |
-| **WebSocket** | Real-time bidirectional communication |
-| **mediasoup / Janus** | Selective Forwarding Unit (SFU) |
-| **Redis** | Session and meeting state management |
+| Technology | Purpose | Status |
+|------------|---------|--------|
+| **Node.js** | Signaling server runtime | ✅ Running |
+| **WebSocket** | Real-time bidirectional communication | ✅ Implemented |
+| **mediasoup** | Selective Forwarding Unit (SFU) | ✅ Integrated |
+| **TypeScript** | Type-safe backend development | ✅ Full coverage |
+
+### **Infrastructure (Deployed)**
+
+| Technology | Purpose | Status |
+|------------|---------|--------|
+| **AWS EC2** | Backend server hosting | ✅ Deployed |
+| **AWS Amplify** | Frontend hosting and CI/CD | ✅ Deployed |
+| **PM2** | Process management and monitoring | ✅ Configured |
+| **SSL/TLS (Let's Encrypt)** | Secure WebSocket (WSS) and HTTPS | ✅ Enabled |
+| **CloudFront** | Global CDN for frontend assets | ✅ Active |
 
 ### **Infrastructure (Planned)**
 
 | Technology | Purpose |
 |------------|---------|
 | **Docker + Kubernetes** | Containerization and orchestration |
-| **Nginx / HAProxy** | Load balancing and SSL termination |
+| **Load Balancer** | Multi-instance backend distribution |
 | **Prometheus + Grafana** | Monitoring and metrics visualization |
 
 ---
@@ -165,7 +347,19 @@ Each command above runs synchronously and prints results to your terminal.
 
 ```
 team-bug-farmers/
-├── src/
+├── backend/                            # Backend server (Node.js + mediasoup)
+│   ├── src/
+│   │   ├── server.ts                   # Main server entry point
+│   │   ├── SignalingServer.ts          # WebSocket signaling + mediasoup
+│   │   ├── MediasoupManager.ts         # mediasoup Worker/Router/Transport
+│   │   ├── StreamForwarder.ts          # Audio stream management
+│   │   ├── FingerprintVerifier.ts      # Audio fingerprint verification
+│   │   ├── RtcpCollector.ts            # RTCP metrics collection
+│   │   └── QualityController.ts        # Adaptive quality management
+│   ├── dist/                           # Compiled JavaScript output
+│   ├── package.json                    # Backend dependencies
+│   └── tsconfig.json                   # Backend TypeScript config
+├── src/                                # Frontend source code
 │   ├── components/
 │   │   ├── meeting/                    # Meeting-specific components
 │   │   │   ├── AckIndicator.tsx        # Audio delivery feedback
@@ -194,12 +388,20 @@ team-bug-farmers/
 │   │   ├── JoinMeetingModal.tsx        # Meeting join screen
 │   │   ├── MeetingView.tsx             # Main meeting interface
 │   │   └── ZoomWorkspace.tsx           # Background workspace
+│   ├── services/                       # Client-side services
+│   │   ├── UserClient.ts               # Main client orchestrator
+│   │   ├── MediasoupClient.ts          # mediasoup-client Device API wrapper
+│   │   ├── SignalingClient.ts          # WebSocket communication
+│   │   ├── AudioCapture.ts             # Microphone capture
+│   │   └── AudioPlayer.ts              # Audio playback
 │   ├── types/
 │   │   └── index.ts                    # TypeScript type definitions
 │   ├── styles/
 │   │   └── globals.css                 # Global styles and Tailwind
 │   ├── App.tsx                         # Main application component
 │   └── main.tsx                        # Application entry point
+├── public/
+│   └── audio-test.html                 # Simple mediasoup-client test page
 ├── assets/
 │   ├── dev_specs/                      # Development specifications
 │   │   ├── diagrams/                   # Architecture diagrams
@@ -214,8 +416,8 @@ team-bug-farmers/
 │   │   └── user_stories.md             # User story specifications
 │   └── mockups/                        # UI mockup designs
 ├── index.html                          # HTML entry point
-├── package.json                        # Project dependencies
-├── tsconfig.json                       # TypeScript configuration
+├── package.json                        # Frontend dependencies
+├── tsconfig.json                       # Frontend TypeScript configuration
 ├── vite.config.ts                      # Vite configuration
 ├── tailwind.config.js                  # Tailwind CSS configuration
 ├── postcss.config.js                   # PostCSS configuration
@@ -224,7 +426,9 @@ team-bug-farmers/
 
 ### **Key Directories Explained**
 
+- **`backend/src/`** - Node.js + mediasoup server implementation
 - **`src/components/meeting/`** - Core meeting functionality components
+- **`src/services/`** - Client-side WebRTC and signaling services
 - **`src/components/ui/`** - shadcn/ui components (buttons, dialogs, etc.)
 - **`src/types/`** - TypeScript type definitions matching Dev Spec
 - **`assets/dev_specs/`** - Comprehensive technical documentation
@@ -258,26 +462,38 @@ team-bug-farmers/
 
 ### ✅ **Completed**
 
+#### Frontend
 - ✅ Full UI implementation matching Dev Spec
 - ✅ TypeScript type system for all data models
 - ✅ Connection state machine (11 states)
 - ✅ Quality tier indicators (LOW/MEDIUM/HIGH)
 - ✅ ACK/NACK feedback display
 - ✅ Participant list with status
-- ✅ Mock data simulation for testing
 - ✅ Responsive design with Tailwind CSS
 - ✅ Accessible UI with Radix components
+- ✅ mediasoup-client integration
+- ✅ Real audio capture and playback
+- ✅ WebSocket signaling client
+- ✅ Audio fingerprinting (sender & receiver)
 
-### 🚧 **In Progress / Planned**
+#### Backend
+- ✅ Node.js + TypeScript server
+- ✅ WebSocket signaling server
+- ✅ mediasoup SFU integration
+- ✅ Worker/Router/Transport management
+- ✅ Producer/Consumer creation
+- ✅ Stream forwarding logic
+- ✅ RTCP metrics collection
+- ✅ Quality controller (adaptive bitrate)
+- ✅ Fingerprint verification
 
-- 🚧 WebRTC backend integration
-- 🚧 Real audio capture and playback
-- 🚧 WebSocket signaling implementation
-- 🚧 SFU (Selective Forwarding Unit) setup
-- 🚧 CRC32 fingerprint calculation
-- 🚧 RTCP report collection
-- 🚧 State management with Zustand
-- 🚧 Unit and integration tests
+#### Deployment & Infrastructure
+- ✅ AWS EC2 backend deployment
+- ✅ AWS Amplify frontend deployment
+- ✅ PM2 process management
+- ✅ SSL/TLS encryption (WSS + HTTPS)
+- ✅ CloudFront CDN distribution
+- ✅ Production-ready configuration
 
 ---
 
@@ -286,57 +502,116 @@ team-bug-farmers/
 ```
 User Input (Join Modal)
     ↓
-Connection State Machine (11 states)
+UserClient.joinMeeting()
     ↓
-Mock Backend Simulation
+SignalingClient (WebSocket) ← → SignalingServer (Backend)
     ↓
-State Updates (participants, quality, ACKs)
+MediasoupClient.initialize()
     ↓
-UI Components Render
+Get Router RTP Capabilities
     ↓
-Dynamic Updates (every 2-10 seconds)
+Create Send/Recv Transports (DTLS handshake)
+    ↓
+AudioCapture → Producer (send audio)
+    ↓
+Backend: Create Consumer for other participants
+    ↓
+Consumer → AudioPlayer (receive & play audio)
+    ↓
+RTCP Reports (quality metrics) → Backend
+    ↓
+Quality Controller (adaptive bitrate)
+    ↓
+State Updates → UI Components Render
 ```
 
-### **Mock Data Behavior**
+### **Real-Time Communication**
 
-Currently, the application simulates:
-- **3 participants** (you + 2 mock users)
-- **Quality tier changes** every 10 seconds
-- **ACK summary updates** every 2 seconds (80% success rate)
-- **Connection state transitions** during join
+The application uses:
+- **WebSocket** for signaling (SDP, ICE, commands)
+- **WebRTC/mediasoup** for audio transport (RTP/SRTP)
+- **RTCP** for quality metrics (every 5 seconds)
+- **Fingerprints** for audio delivery verification (50 fps)
+- **Adaptive Quality** adjusts bitrate based on network conditions
 
 ---
 
 ## 🧪 Testing the Application
 
-### **Basic Flow**
+### **Production Testing**
 
-1. **Join a Meeting**
-   - Enter User ID (e.g., `john@example.com`)
-   - Enter Meeting ID (e.g., `meeting-123`)
-   - Optionally enter Display Name (e.g., `John Smith`)
+The application is live in production! You can test it directly without any local setup.
+
+**Note**: Replace the URLs below with your actual production URLs:
+- **Frontend**: `https://your-amplify-app.amplifyapp.com`
+- **Backend WebSocket**: `wss://your-ec2-domain.com:8080`
+
+### **Local Development Testing**
+
+### **Prerequisites**
+
+1. **Start both servers** (see "Running the Application" section above)
+2. **Use Chrome or Edge** (best WebRTC support)
+3. **Allow microphone access** when prompted
+
+### **Option A: Main Application Test**
+
+1. **Open TWO browser tabs** to `http://localhost:5173` (or 5174)
+
+2. **Tab 1 - First User**
+   - Enter User ID: `alice`
+   - Enter Meeting ID: `test`
+   - Enter Display Name: `Alice`
    - Click "Join"
+   - Grant microphone permission
 
-2. **First Attempt Fails** (demo behavior)
-   - Connection error modal appears
-   - Click "Retry Connection"
+3. **Tab 2 - Second User**
+   - Enter User ID: `bob`
+   - Enter Meeting ID: `test`
+   - Enter Display Name: `Bob`
+   - Click "Join"
+   - Grant microphone permission
 
-3. **Second Attempt Succeeds**
-   - Meeting view loads
-   - See your display name in center and bottom-left
-   - Quality indicator shows "HIGH" (64 kbps)
-   - ACK indicator shows "2/3 hearing you"
+4. **Expected Behavior**
+   - See connection status change: Connecting → Signaling → Streaming
+   - See participant list update with both users
+   - See "Audio active" indicator (green)
+   - Speak into microphone and listen for audio in other tab
 
-4. **Observe Dynamic Updates**
-   - Quality tier changes every 10 seconds
-   - ACK status updates every 2 seconds
-   - Toggle participant list (top-right button)
+### **Option B: Simple Audio Test (Recommended for Debugging)**
 
-5. **Test Controls**
-   - Mute/unmute microphone
-   - Toggle video
-   - Open audio settings
-   - View participants
+1. **Open TWO browser tabs** to `http://localhost:5173/audio-test.html`
+
+2. **Tab 1**
+   - User ID: `Alice`
+   - Meeting ID: `test`
+   - Click "Join & Start Audio"
+
+3. **Tab 2**
+   - User ID: `Bob`
+   - Meeting ID: `test`
+   - Click "Join & Start Audio"
+
+4. **Check Console Logs**
+   - Should see: "✅ Device loaded"
+   - Should see: "✅ Producer created"
+   - Should see: "🔊🔊🔊 AUDIO PLAYING!"
+
+### **Troubleshooting**
+
+#### Local Development
+- **No audio?** Check browser console for errors
+- **AudioContext suspended?** Click anywhere on the page
+- **No microphone?** Check system settings and browser permissions
+- **Connection failed?** Ensure backend is running on port 8080
+
+#### Production Deployment
+- **WSS connection failed?** Verify SSL certificates are valid
+- **Backend not responding?** Check PM2 status: `pm2 status`
+- **View backend logs**: `pm2 logs webrtc-backend`
+- **Restart backend**: `pm2 restart webrtc-backend`
+- **Frontend build issues?** Check AWS Amplify build logs
+- **CORS errors?** Verify backend CORS configuration for your Amplify domain
 
 ---
 
@@ -362,6 +637,69 @@ Currently, the application simulates:
 - Currently using **local state** in `App.tsx`
 - Plan to migrate to **Zustand** for global state
 - Keep state **close to where it's used**
+
+---
+
+## 🏗️ Architecture Overview
+
+### **Backend Components**
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   SignalingServer                   │
+│  • WebSocket connections (ws://)                    │
+│  • SDP negotiation (Offer/Answer)                   │
+│  • mediasoup protocol handlers                      │
+│  • Producer/Consumer orchestration                  │
+└─────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────┐
+│                  MediasoupManager                   │
+│  • Worker management (C++ processes)                │
+│  • Router creation (RTP capabilities)               │
+│  • Transport creation (WebRTC endpoints)            │
+│  • Producer/Consumer lifecycle                      │
+└─────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────┐
+│                   StreamForwarder                   │
+│  • Audio stream routing (SFU logic)                 │
+│  • Participant tracking                             │
+│  • Consumer creation for new producers              │
+└─────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────┐
+│         RtcpCollector + QualityController          │
+│  • RTCP metrics aggregation                         │
+│  • Network quality analysis                         │
+│  • Adaptive bitrate decisions                       │
+└─────────────────────────────────────────────────────┘
+```
+
+### **Frontend Components**
+
+```
+┌─────────────────────────────────────────────────────┐
+│                     UserClient                      │
+│  • High-level orchestration                         │
+│  • State management                                 │
+│  • Event coordination                               │
+└─────────────────────────────────────────────────────┘
+                        ↓
+┌──────────────────────┬──────────────────────────────┐
+│   SignalingClient    │     MediasoupClient          │
+│  • WebSocket comm    │  • Device API wrapper        │
+│  • Message routing   │  • Transport management      │
+│  • Protocol handlers │  • Producer/Consumer         │
+└──────────────────────┴──────────────────────────────┘
+                        ↓
+┌──────────────────────┬──────────────────────────────┐
+│    AudioCapture      │       AudioPlayer            │
+│  • Microphone input  │  • Speaker output            │
+│  • Audio constraints │  • AudioContext              │
+│  • MediaStream       │  • Volume control            │
+└──────────────────────┴──────────────────────────────┘
+```
 
 ---
 
