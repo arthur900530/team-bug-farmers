@@ -73,11 +73,25 @@ export default defineConfig({
       name: 'firefox',
       use: { 
         ...devices['Desktop Firefox'],
-        // Firefox specific preferences to auto-accept media permissions
+        // Grant microphone permissions explicitly
+        permissions: ['microphone'],
+        // Firefox specific preferences for fake media streams
         launchOptions: {
           firefoxUserPrefs: {
+            // Enable fake media streams (critical for CI/headless)
             'media.navigator.streams.fake': true,
+            // Disable permission prompts
             'media.navigator.permission.disabled': true,
+            // Allow media access by default (1 = allow)
+            'media.navigator.permission.default': 1,
+            // Allow all domains for media access
+            'media.getusermedia.screensharing.allowed_domains': '*',
+            // Disable hardware acceleration (may help with fake streams)
+            'media.webrtc.hw.h264.enabled': false,
+            // Enable WebRTC (should be default, but explicit)
+            'media.peerconnection.enabled': true,
+            // Allow fake audio devices
+            'media.audio_loopback_dev': true,
           },
         },
       },

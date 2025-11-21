@@ -95,6 +95,8 @@ jobs:
           echo "✅ Both servers are running!"
 
       - name: Run Localhost Integration Tests
+        id: localhost-tests
+        continue-on-error: true  # Continue to cloud tests even if localhost tests fail
         env:
           TEST_ENV: localhost
         run: npx playwright test
@@ -153,7 +155,9 @@ jobs:
           fi
 
       - name: Run Cloud Integration Tests
+        id: cloud-tests
         if: steps.cloud-health.outputs.cloud_available == 'true'
+        continue-on-error: true  # Continue to summary even if cloud tests fail
         env:
           TEST_ENV: cloud
           CLOUD_URL: https://main.d3j8fnrr90aipm.amplifyapp.com
@@ -182,4 +186,59 @@ jobs:
           name: test-results-cloud
           path: test-results/
           retention-days: 7
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "## Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Localhost Tests" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.localhost-tests.outcome }}" == "success" ]; then
+            echo "✅ **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **FAILED** (workflow continued to cloud tests)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Cloud Tests" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.cloud-health.outputs.cloud_available }}" == "true" ]; then
+            if [ "${{ steps.cloud-tests.outcome }}" == "success" ]; then
+              echo "✅ **PASSED**" >> $GITHUB_STEP_SUMMARY
+            elif [ "${{ steps.cloud-tests.outcome }}" == "failure" ]; then
+              echo "❌ **FAILED**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ **SKIPPED** (infrastructure unavailable)" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ **SKIPPED** (infrastructure unavailable)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** Both localhost and cloud tests are equally important. Fix any failures before merging." >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if any tests failed
+        if: always()
+        run: |
+          LOCALHOST_OUTCOME="${{ steps.localhost-tests.outcome }}"
+          CLOUD_OUTCOME="${{ steps.cloud-health.outputs.cloud_available }}"
+          CLOUD_TEST_OUTCOME="${{ steps.cloud-tests.outcome }}"
+          
+          FAILED=false
+          
+          if [ "$LOCALHOST_OUTCOME" == "failure" ]; then
+            echo "❌ Localhost tests failed"
+            FAILED=true
+          fi
+          
+          if [ "$CLOUD_OUTCOME" == "true" ] && [ "$CLOUD_TEST_OUTCOME" == "failure" ]; then
+            echo "❌ Cloud tests failed"
+            FAILED=true
+          fi
+          
+          if [ "$FAILED" == "true" ]; then
+            echo "❌ Some tests failed. Check the test artifacts for details."
+            exit 1
+          else
+            echo "✅ All executed tests passed!"
+          fi
 
