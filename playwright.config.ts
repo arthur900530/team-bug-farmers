@@ -73,9 +73,9 @@ export default defineConfig({
       name: 'firefox',
       use: { 
         ...devices['Desktop Firefox'],
-        // Grant microphone permissions explicitly
-        permissions: ['microphone'],
         // Firefox specific preferences for fake media streams
+        // Note: Firefox doesn't support the 'permissions' API like Chromium
+        // All permissions must be configured via firefoxUserPrefs
         launchOptions: {
           firefoxUserPrefs: {
             // Enable fake media streams (critical for CI/headless)
