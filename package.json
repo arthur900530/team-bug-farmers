@@ -15,6 +15,7 @@
     "test:backend": "jest tests/backend --runInBand",
     "check:backend": "node scripts/check-backend-health.js",
     "check:frontend": "node scripts/check-frontend-backend-connectivity.js",
+    "check:amplify": "node scripts/check-amplify-deployment.js",
     "check:cloud": "npm run check:backend && npm run check:frontend"
   },
   "dependencies": {

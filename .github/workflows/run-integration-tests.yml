@@ -1,0 +1,83 @@
+name: Run Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'backend/**'
+      - 'tests/integration/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+  workflow_dispatch:
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: Build Backend
+        run: |
+          cd backend
+          npm ci
+          npm run build
+
+      - name: Start Backend (Background)
+        run: |
+          cd backend
+          npm start &
+          echo "Backend started with PID $!"
+          # Wait for backend to be ready
+          timeout 30 bash -c 'until curl -f http://localhost:8080/health; do sleep 1; done' || true
+          sleep 3
+
+      - name: Build Frontend
+        run: npm run build
+
+      - name: Start Frontend (Background)
+        run: |
+          npm run preview -- --port 4173 &
+          echo "Frontend started with PID $!"
+          # Wait for frontend to be ready
+          timeout 30 bash -c 'until curl -f http://localhost:4173; do sleep 1; done' || true
+          sleep 2
+
+      - name: Run Integration Tests
+        env:
+          # Point tests to local background services
+          TEST_ENV: localhost
+          BASE_URL: "http://localhost:4173"
+        run: npx playwright test
+
+      - name: Upload Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 7
+
