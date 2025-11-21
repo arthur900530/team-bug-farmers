@@ -1,0 +1,91 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - button "Close window" [ref=e7] [cursor=pointer]
+      - button "Minimize window" [ref=e8] [cursor=pointer]
+      - button "Maximize window" [ref=e9] [cursor=pointer]
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - img [ref=e12]
+        - generic [ref=e15]: Connected
+      - generic [ref=e16]:
+        - generic [ref=e18]: View
+        - button "View options" [ref=e19] [cursor=pointer]: ▣
+  - generic [ref=e20]:
+    - generic [ref=e21]:
+      - img [ref=e22]
+      - generic [ref=e27]:
+        - generic [ref=e28]: High Quality
+        - generic [ref=e29]: 64 kbps
+    - generic [ref=e32]: Audio active
+    - generic [ref=e37]: No TX
+    - button "1 Participant" [ref=e40] [cursor=pointer]:
+      - img [ref=e41]
+      - generic [ref=e46]: 1 Participant
+  - generic [ref=e47]:
+    - generic [ref=e49]: User A
+    - generic [ref=e50]: User A
+  - generic [ref=e52]:
+    - generic [ref=e53]:
+      - generic [ref=e54]:
+        - button "Mute microphone" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+        - button "Microphone settings" [ref=e60] [cursor=pointer]:
+          - img [ref=e61]
+      - generic [ref=e63]:
+        - generic [ref=e64]: Audio
+        - generic [ref=e65]: Unmuted
+      - generic [ref=e66]:
+        - button "Start video" [ref=e67] [cursor=pointer]:
+          - img [ref=e68]
+        - button "Video settings" [ref=e72] [cursor=pointer]:
+          - img [ref=e73]
+      - generic [ref=e75]:
+        - generic [ref=e76]: Video
+        - generic [ref=e77]: "Off"
+    - generic [ref=e78]:
+      - generic [ref=e79]:
+        - button "Share screen" [ref=e80] [cursor=pointer]:
+          - img [ref=e81]
+        - button [ref=e85] [cursor=pointer]:
+          - img [ref=e86]
+        - generic [ref=e88]: Share
+      - generic [ref=e89]:
+        - button "View participants" [ref=e90] [cursor=pointer]:
+          - img [ref=e91]
+          - generic [ref=e96]: "1"
+        - button [ref=e97] [cursor=pointer]:
+          - img [ref=e98]
+        - generic [ref=e100]: Participants
+      - generic [ref=e101]:
+        - button "Open chat" [ref=e102] [cursor=pointer]:
+          - img [ref=e103]
+        - button [ref=e105] [cursor=pointer]:
+          - img [ref=e106]
+        - generic [ref=e108]: Chat
+      - generic [ref=e109]:
+        - button "Send reaction" [ref=e110] [cursor=pointer]:
+          - img [ref=e111]
+        - button [ref=e113] [cursor=pointer]:
+          - img [ref=e114]
+        - generic [ref=e116]: React
+      - generic [ref=e117]:
+        - button "Host tools" [ref=e118] [cursor=pointer]:
+          - img [ref=e119]
+        - generic [ref=e121]: Host tools
+      - generic [ref=e122]:
+        - button "Meeting info" [ref=e123] [cursor=pointer]:
+          - img [ref=e124]
+        - generic [ref=e128]: Meeting info
+      - generic [ref=e129] [cursor=pointer]:
+        - button "More options" [ref=e130]:
+          - img [ref=e131]
+        - generic [ref=e135]: More
+    - generic [ref=e136]:
+      - button "End meeting" [ref=e137] [cursor=pointer]:
+        - img [ref=e138]
+      - generic [ref=e141]: End
+```

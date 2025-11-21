@@ -92,7 +92,6 @@ export default function App() {
         signalingClient.onJoined((joinedMsg: any) => {
           console.log('[App] Initial participants:', joinedMsg.participants);
           const participantSessions = joinedMsg.participants
-            .filter((pid: string) => pid !== userId) // Don't include self
             .map((pid: string) => ({
               userId: pid,
               pcId: `pc-${pid}`,

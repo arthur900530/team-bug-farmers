@@ -39,6 +39,24 @@ console.log('===========================================');
 // Initialize components
 (async () => {
   try {
+    // Define request handler for HTTP/HTTPS server
+    const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url === '/health' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ok',
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+          service: 'webrtc-signaling-server',
+          ssl: USE_SSL
+        }));
+      } else {
+        // Default 404 handler
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found' }));
+      }
+    };
+
     // Create HTTP or HTTPS server
     let httpServer: http.Server | https.Server;
     
@@ -57,18 +75,18 @@ console.log('===========================================');
           cert: fs.readFileSync(SSL_CERT_PATH),
           key: fs.readFileSync(SSL_KEY_PATH)
         };
-        httpServer = https.createServer(sslOptions);
+        httpServer = https.createServer(sslOptions, requestHandler);
         console.log('✅ SSL certificates loaded successfully');
         console.log(`   Certificate: ${SSL_CERT_PATH}`);
         console.log(`   Key: ${SSL_KEY_PATH}`);
       } catch (error) {
         console.error('❌ Failed to load SSL certificates:', error);
         console.error('   Falling back to HTTP (insecure)');
-        httpServer = http.createServer();
+        httpServer = http.createServer(requestHandler);
       }
     } else {
       console.log('⚠️  Running without SSL (HTTP only - not recommended for production)');
-      httpServer = http.createServer();
+      httpServer = http.createServer(requestHandler);
     }
     
     // Create MeetingRegistry (from dev_specs/classes.md M2.2)
