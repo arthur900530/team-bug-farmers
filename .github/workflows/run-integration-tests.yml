@@ -14,7 +14,7 @@ on:
 jobs:
   integration-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20  # Increased for both localhost + cloud tests
 
     steps:
       - name: Checkout Code
@@ -93,25 +93,92 @@ jobs:
           curl -f http://localhost:5173 || (echo "Frontend not responding!" && exit 1)
           echo "✅ Both servers are running!"
 
-      - name: Run Integration Tests
+      - name: Run Localhost Integration Tests
         env:
-          # Point tests to local background services
           TEST_ENV: localhost
         run: npx playwright test
 
-      - name: Upload Test Artifacts
+      - name: Upload Localhost Test Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-localhost
           path: playwright-report/
           retention-days: 30
 
-      - name: Upload Test Results
+      - name: Upload Localhost Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-localhost
+          path: test-results/
+          retention-days: 7
+
+      - name: Check Cloud Infrastructure Health
+        id: cloud-health
+        continue-on-error: true
+        run: |
+          echo "Checking cloud infrastructure availability..."
+          BACKEND_URL="https://34.193.221.159.nip.io:443"
+          FRONTEND_URL="https://main.d3j8fnrr90aipm.amplifyapp.com"
+          
+          # Check backend health
+          BACKEND_OK=false
+          if curl -f -k --max-time 10 "${BACKEND_URL}/health" > /dev/null 2>&1; then
+            echo "✅ Backend is accessible"
+            BACKEND_OK=true
+          else
+            echo "⚠️  Backend health check failed"
+          fi
+          
+          # Check frontend accessibility
+          FRONTEND_OK=false
+          if curl -f --max-time 10 "${FRONTEND_URL}" > /dev/null 2>&1; then
+            echo "✅ Frontend is accessible"
+            FRONTEND_OK=true
+          else
+            echo "⚠️  Frontend accessibility check failed"
+          fi
+          
+          # Set output based on both checks
+          if [ "$BACKEND_OK" = true ] && [ "$FRONTEND_OK" = true ]; then
+            echo "cloud_available=true" >> $GITHUB_OUTPUT
+            echo "✅ Cloud infrastructure is available - cloud tests will run"
+          else
+            echo "cloud_available=false" >> $GITHUB_OUTPUT
+            echo "⚠️  WARNING: Cloud infrastructure is not available - cloud tests will be skipped"
+            echo "   Backend: $BACKEND_OK"
+            echo "   Frontend: $FRONTEND_OK"
+          fi
+
+      - name: Run Cloud Integration Tests
+        if: steps.cloud-health.outputs.cloud_available == 'true'
+        env:
+          TEST_ENV: cloud
+          CLOUD_URL: https://main.d3j8fnrr90aipm.amplifyapp.com
+          CLOUD_BACKEND_WS_URL: wss://34.193.221.159.nip.io:443
+        run: npx playwright test
+
+      - name: Skip Cloud Tests Warning
+        if: steps.cloud-health.outputs.cloud_available != 'true'
+        run: |
+          echo "::warning::Cloud infrastructure is not available. Cloud tests were skipped."
+          echo "This is not a failure - localhost tests still passed."
+          echo "To verify cloud infrastructure manually, run: npm run check:cloud"
+
+      - name: Upload Cloud Test Artifacts
+        if: always() && steps.cloud-health.outputs.cloud_available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-cloud
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload Cloud Test Results
+        if: always() && steps.cloud-health.outputs.cloud_available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-cloud
           path: test-results/
           retention-days: 7
 
