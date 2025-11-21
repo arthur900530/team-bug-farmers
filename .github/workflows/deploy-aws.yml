@@ -1,0 +1,49 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**' # Only trigger if backend code changes
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # 1. Go to the folder
+            cd /home/ubuntu/team-bug-farmers/backend
+            
+            # 2. Pull latest code
+            git pull origin main
+            
+            # 3. Install dependencies (in case you added new packages)
+            npm install
+            
+            # 4. Rebuild TypeScript
+            npm run build
+            
+            # 5. Restart the server with the Environment Variables
+            # We use 'delete' and 'start' to ensure Env Vars are refreshed
+            sudo pm2 delete mediasoup-server || true
+            
+            sudo \
+            WS_PORT=443 \
+            USE_SSL=true \
+            SSL_CERT_PATH=/etc/letsencrypt/live/34.193.221.159.nip.io/fullchain.pem \
+            SSL_KEY_PATH=/etc/letsencrypt/live/34.193.221.159.nip.io/privkey.pem \
+            ANNOUNCED_IP=34.193.221.159 \
+            pm2 start dist/server.js --name "mediasoup-server"
+            
+            # 6. Save PM2 list so it survives reboots
+            pm2 save
