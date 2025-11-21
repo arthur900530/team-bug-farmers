@@ -38,31 +38,65 @@ jobs:
           npm ci
           npm run build
 
-      - name: Start Backend (Background)
+      - name: Start Backend and Frontend
         run: |
+          # Start backend in background
           cd backend
-          npm start &
-          echo "Backend started with PID $!"
+          npm start > ../backend.log 2>&1 &
+          BACKEND_PID=$!
+          echo "Backend started with PID $BACKEND_PID"
+          cd ..
+          
+          # Start frontend in background
+          npm run dev -- --port 5173 --host > frontend.log 2>&1 &
+          FRONTEND_PID=$!
+          echo "Frontend started with PID $FRONTEND_PID"
+          
           # Wait for backend to be ready
-          timeout 30 bash -c 'until curl -f http://localhost:8080/health; do sleep 1; done' || true
-          sleep 3
-
-      - name: Build Frontend
-        run: npm run build
-
-      - name: Start Frontend (Background)
-        run: |
-          npm run preview -- --port 4173 &
-          echo "Frontend started with PID $!"
+          echo "Waiting for backend..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8080/health > /dev/null 2>&1; then
+              echo "✅ Backend is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "❌ Backend failed to start"
+              cat backend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          
           # Wait for frontend to be ready
-          timeout 30 bash -c 'until curl -f http://localhost:4173; do sleep 1; done' || true
-          sleep 2
+          echo "Waiting for frontend..."
+          for i in {1..60}; do
+            if curl -f http://localhost:5173 > /dev/null 2>&1; then
+              echo "✅ Frontend is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "❌ Frontend failed to start"
+              cat frontend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          
+          # Give servers a moment to fully initialize
+          sleep 3
+          echo "Both servers are ready!"
+
+      - name: Verify Servers Are Running
+        run: |
+          echo "Verifying servers..."
+          curl -f http://localhost:8080/health || (echo "Backend not responding!" && exit 1)
+          curl -f http://localhost:5173 || (echo "Frontend not responding!" && exit 1)
+          echo "✅ Both servers are running!"
 
       - name: Run Integration Tests
         env:
           # Point tests to local background services
           TEST_ENV: localhost
-          BASE_URL: "http://localhost:4173"
         run: npx playwright test
 
       - name: Upload Test Artifacts
