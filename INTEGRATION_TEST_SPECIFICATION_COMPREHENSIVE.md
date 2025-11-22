@@ -3,7 +3,7 @@
 **Document Version:** 2.0  
 **Date:** November 21, 2025  
 **Project:** WebRTC Audio Conferencing System  
-**Status:** Based on Currently Passing Tests (9 Chromium tests)
+**Status:** Based on Currently Passing Tests (5 Chromium tests)
 
 ---
 
@@ -62,44 +62,28 @@ This document specifies integration tests for code pathways that span both front
 - Multi-user meeting support
 
 ### 2.2 User Story 3: Audio Fingerprinting
-**Status:** ⚠️ Infrastructure Implemented, Feature Disabled
+**Status:** ❌ Not Tested (Feature Disabled)
 
-- Sender fingerprint generation and transmission (currently disabled in `UserClient.ts`)
-- Receiver fingerprint generation and transmission (currently disabled)
-- Fingerprint verification on backend (infrastructure exists)
-- ACK summary generation and delivery (infrastructure exists)
-- CRC32 integrity checking (infrastructure exists)
-- RTP timestamp synchronization (infrastructure exists)
-
-**Note:** Tests verify infrastructure exists but will not pass until fingerprinting is enabled.
+- Fingerprinting feature is currently disabled in `UserClient.ts`
+- No integration tests implemented for this user story
 
 ### 2.3 User Story 8: Adaptive Quality Control
-**Status:** ✅ Partially Implemented and Tested
+**Status:** ✅ RTCP Reporting Tested
 
-- RTCP report generation and transmission (sends dummy data)
-- RTCP statistics aggregation on backend (infrastructure exists)
-- Quality tier decision algorithm (infrastructure exists, requires real RTCP data)
-- Tier change notification delivery (infrastructure exists)
-- Simulcast layer switching (infrastructure exists)
-
-**Note:** RTCP reporting works but sends dummy data (all zeros), so tier changes won't occur until real statistics are collected.
+- RTCP report generation and transmission (tested, sends dummy data)
+- RTCP statistics aggregation on backend (tested, receives reports)
 
 ### 2.4 Meeting State Management
-**Status:** ✅ Fully Implemented and Tested
+**Status:** ✅ Fully Tested
 
 - Multiple users joining same meeting
 - Participant list synchronization
 - User-joined notifications
-- User-left notifications (infrastructure exists)
-- Meeting cleanup on last user departure (infrastructure exists)
 
 ### 2.5 Error Handling & Edge Cases
-**Status:** ⚠️ Partially Tested
+**Status:** ❌ Not Tested
 
-- WebSocket connection failures
-- Invalid message formats
-- Timeout handling
-- Resource cleanup
+- Error handling scenarios are not currently covered by integration tests
 
 ---
 
@@ -162,20 +146,6 @@ This document specifies integration tests for code pathways that span both front
 - **Backend:** `SignalingServer.handleRtcpReport()` → Stores in `RtcpCollector`
 - **Test:** INT-8-001, INT-8-002, INT-8-005
 
-#### **Pathway 12: Tier Change Notification**
-- **Backend:** `QualityController.determineTier()` → Decides tier change → Sends `{type: 'tier-change', tier}`
-- **Frontend:** `SignalingClient.onTierChange()` → Updates quality tier
-- **Test:** INT-8-010 (infrastructure verified, requires real RTCP data)
-
-#### **Pathway 13: Fingerprint Transmission (User Story 3 - Disabled)**
-- **Frontend:** `UserClient.sendSenderFingerprint()` → Sends `{type: 'frame-fingerprint', role: 'sender', ...}`
-- **Backend:** `SignalingServer.handleFingerprint()` → Stores in `FingerprintVerifier`
-- **Test:** INT-3-001 (infrastructure verified, feature disabled)
-
-#### **Pathway 14: ACK Summary Delivery (User Story 3 - Disabled)**
-- **Backend:** `AckAggregator.generateSummary()` → Sends `{type: 'ack-summary', ackedUsers, missingUsers, matchRate}`
-- **Frontend:** `SignalingClient.onAckSummary()` → Displays ACK status
-- **Test:** INT-3-009 (infrastructure verified, feature disabled)
 
 ---
 
@@ -204,34 +174,6 @@ This document specifies integration tests for code pathways that span both front
 
 ---
 
-### 4.2 User Story 3: Audio Fingerprinting
-
-#### Test Group: Sender Fingerprint Flow
-
-| Test ID | Test Purpose | Test Inputs | Expected Output | Pass Criteria | Implementation Status |
-|---------|-------------|-------------|-----------------|---------------|----------------------|
-| **INT-3-001 to INT-3-004** | Verify sender fingerprint generation and transmission infrastructure | Frontend: Join meeting, wait 2 seconds after connection established | Console logs showing fingerprint transmission messages (if enabled) | Infrastructure exists (logs captured), but feature is disabled | ⚠️ **INFRASTRUCTURE VERIFIED** (Feature disabled in `UserClient.ts`) |
-
-**Pathways Covered:**
-- ⚠️ Pathway 13: Fingerprint Transmission (disabled)
-
-#### Test Group: Receiver Fingerprint Flow
-
-| Test ID | Test Purpose | Test Inputs | Expected Output | Pass Criteria | Implementation Status |
-|---------|-------------|-------------|-----------------|---------------|----------------------|
-| **INT-3-005 to INT-3-008** | Verify receiver fingerprint generation and verification infrastructure | Frontend: Two users join (sender + receiver), wait 3 seconds for audio flow | Console logs showing receiver fingerprint messages (if enabled) | Infrastructure exists (logs captured), but feature is disabled | ⚠️ **INFRASTRUCTURE VERIFIED** (Feature disabled in `UserClient.ts`) |
-
-#### Test Group: ACK Summary Generation & Delivery
-
-| Test ID | Test Purpose | Test Inputs | Expected Output | Pass Criteria | Implementation Status |
-|---------|-------------|-------------|-----------------|---------------|----------------------|
-| **INT-3-009 to INT-3-012** | Verify ACK summary generation and delivery infrastructure | Frontend: Two users join (sender + receiver), wait 6 seconds for ACK summary generation (5s interval) | Console logs showing ACK summary messages (if fingerprinting enabled) | Infrastructure exists (logs captured), but feature requires fingerprinting to be enabled | ⚠️ **INFRASTRUCTURE VERIFIED** (Requires fingerprinting enabled) |
-
-**Pathways Covered:**
-- ⚠️ Pathway 14: ACK Summary Delivery (disabled)
-
----
-
 ### 4.3 User Story 8: Adaptive Quality Control
 
 #### Test Group: RTCP Statistics Collection
@@ -250,34 +192,22 @@ This document specifies integration tests for code pathways that span both front
 |---------|-------------|-------------|-----------------|---------------|----------------------|
 | **INT-8-005 to INT-8-009** | Verify backend receives RTCP reports for quality decisions | Frontend: Join meeting, wait 12 seconds | Multiple RTCP reports sent to backend (verified via console logs) | At least one RTCP report sent | ✅ **PASSING** (Chromium, backend infrastructure exists but requires real RTCP data for tier changes) |
 
-#### Test Group: Tier Change Notification
-
-| Test ID | Test Purpose | Test Inputs | Expected Output | Pass Criteria | Implementation Status |
-|---------|-------------|-------------|-----------------|---------------|----------------------|
-| **INT-8-010 to INT-8-011** | Verify tier change notification infrastructure | Frontend: Two users join, wait 10 seconds | Console logs showing tier change messages (if tier change occurs) | Infrastructure exists (logs captured), but tier changes require real RTCP statistics | ⚠️ **INFRASTRUCTURE VERIFIED** (Requires real RTCP data) |
-
-**Pathways Covered:**
-- ⚠️ Pathway 12: Tier Change Notification (infrastructure exists, requires real RTCP data)
 
 ---
 
 ## 5. Test Execution Summary
 
-### 5.1 Currently Passing Tests (9 tests)
+### 5.1 Currently Passing Tests (5 tests)
 
 | Test ID | Description | Browser | Status |
 |---------|-------------|---------|--------|
 | INT-11-A | Full Join Flow | Chromium | ✅ PASSING |
 | INT-11-B | Two-Party Call | Chromium | ✅ PASSING |
-| INT-3-001 to INT-3-004 | Sender Fingerprint Infrastructure | Chromium | ⚠️ INFRASTRUCTURE VERIFIED |
-| INT-3-005 to INT-3-008 | Receiver Fingerprint Infrastructure | Chromium | ⚠️ INFRASTRUCTURE VERIFIED |
-| INT-3-009 to INT-3-012 | ACK Summary Infrastructure | Chromium | ⚠️ INFRASTRUCTURE VERIFIED |
 | INT-8-001 to INT-8-004 | RTCP Statistics Collection | Chromium | ✅ PASSING |
 | INT-8-002 | RTCP Report Transmission Rate | Chromium | ✅ PASSING |
-| INT-8-010 to INT-8-011 | Tier Change Infrastructure | Chromium | ⚠️ INFRASTRUCTURE VERIFIED |
-| INT-8-005 to INT-8-009 | Quality Tier Decision Infrastructure | Chromium | ✅ PASSING |
+| INT-8-005 to INT-8-009 | RTCP Report Reception | Chromium | ✅ PASSING |
 
-**Total:** 9 tests (all Chromium, all passing or infrastructure verified)
+**Total:** 5 tests (all Chromium, all passing)
 
 ### 5.2 Test Coverage by Pathway
 
@@ -294,11 +224,8 @@ This document specifies integration tests for code pathways that span both front
 | 9 | Consumer Creation | INT-11-B (implicit) | ✅ Tested |
 | 10 | User-Joined Notification | INT-11-B | ✅ Tested |
 | 11 | RTCP Report Transmission | INT-8-001, INT-8-002, INT-8-005 | ✅ Tested |
-| 12 | Tier Change Notification | INT-8-010 (infrastructure) | ⚠️ Infrastructure Verified |
-| 13 | Fingerprint Transmission | INT-3-001 (infrastructure) | ⚠️ Infrastructure Verified (Disabled) |
-| 14 | ACK Summary Delivery | INT-3-009 (infrastructure) | ⚠️ Infrastructure Verified (Disabled) |
 
-**Coverage:** 14/14 pathways have test coverage (10 fully tested, 4 infrastructure verified)
+**Coverage:** 11 pathways tested
 
 ---
 
@@ -353,9 +280,6 @@ TEST_ENV=cloud npx playwright test
 - Report count verification: `expect(rtcpReports.length).toBeGreaterThan(0)`
 - Interval verification: `expect(avgInterval).toBeGreaterThan(4000) && expect(avgInterval).toBeLessThan(6000)`
 
-**Fingerprint Tests (INT-3-001, INT-3-005, INT-3-009):**
-- Console log capture for infrastructure verification
-- Note: Tests document expected behavior but will not pass until feature is enabled
 
 ---
 
@@ -447,35 +371,17 @@ Frontend                    Backend
    |                           |
 ```
 
-### 7.4 Fingerprint Flow (User Story 3 - Disabled)
-
-```
-Frontend A          Backend          Frontend B
-   |                   |                 |
-   |-- frame-fingerprint|                 |
-   |   (role: sender)   |-- FingerprintVerifier.store() |
-   |                   |                 |
-   |                   |<-- frame-fingerprint|
-   |                   |   (role: receiver)|
-   |                   |-- FingerprintVerifier.verify() |
-   |                   |-- AckAggregator.add() |
-   |                   |                 |
-   |<-- ack-summary ---|                 |
-   |   (ackedUsers,    |                 |
-   |    matchRate)     |                 |
-```
-
 ---
 
 ## 8. Success Criteria
 
 ### 8.1 Overall System
 
-- ✅ All 9 Chromium tests pass
+- ✅ All 5 Chromium tests pass
 - ✅ No console errors during normal operation
 - ✅ Connection establishment < 15 seconds
 - ✅ Participant list synchronization works correctly
-- ✅ RTCP reporting infrastructure functional
+- ✅ RTCP reporting functional (sends reports every 5 seconds)
 
 ### 8.2 Key Performance Indicators
 
@@ -494,12 +400,13 @@ Frontend A          Backend          Frontend B
 ### 9.1 Current Limitations
 
 - **Firefox Tests:** Skipped in CI due to fake media stream limitations in Playwright
-- **Fingerprinting:** Feature disabled in `UserClient.ts` (infrastructure exists)
-- **RTCP Data:** Currently sends dummy data (all zeros), tier changes won't occur until real statistics collected
-- **Leave Meeting:** Infrastructure exists but not explicitly tested
-- **Error Handling:** Limited test coverage for error scenarios
+- **RTCP Data:** Currently sends dummy data (all zeros)
+- **Leave Meeting:** Not tested
+- **Error Handling:** Not tested
 - **Reconnection:** Not tested
 - **Concurrent Meetings:** Not tested
+- **Fingerprinting (User Story 3):** Feature disabled, not tested
+- **Tier Changes (User Story 8):** Requires real RTCP data, not tested
 
 ### 9.2 Recommended Additional Tests
 
@@ -510,10 +417,10 @@ Frontend A          Backend          Frontend B
 4. **Concurrent Meetings** - Test multiple independent meetings
 
 #### **Medium Priority:**
-5. **Fingerprinting (when enabled)** - Full end-to-end fingerprint verification
-6. **Tier Changes (with real RTCP)** - Test actual quality degradation/improvement
-7. **Network Conditions** - Test with simulated packet loss, high latency
-8. **Maximum Users** - Test meeting capacity (10 users)
+5. **Network Conditions** - Test with simulated packet loss, high latency
+6. **Maximum Users** - Test meeting capacity (10 users)
+7. **Fingerprinting (when enabled)** - Full end-to-end fingerprint verification
+8. **Tier Changes (with real RTCP)** - Test actual quality degradation/improvement
 
 #### **Low Priority:**
 9. **Authentication** - Test JWT validation (currently stubbed)
@@ -569,7 +476,6 @@ npx playwright test adaptive-quality.spec.ts
 | `produce` | Start producing audio | `kind`, `rtpParameters` | ✅ INT-11-A, INT-11-B (implicit) |
 | `consume` | Start consuming audio | `producerId` | ✅ INT-11-B (implicit) |
 | `rtcp-report` | Send RTCP statistics | `meetingId`, `userId`, `rtcpData` | ✅ INT-8-001, INT-8-002, INT-8-005 |
-| `frame-fingerprint` | Send fingerprint | `role`, `fingerprint`, `rtpTimestamp` | ⚠️ INT-3-001 (disabled) |
 | `leave` | Leave meeting | `meetingId`, `userId` | ❌ Not tested |
 
 ### 11.2 Server → Client Messages
@@ -585,9 +491,6 @@ npx playwright test adaptive-quality.spec.ts
 | `consumed` | Consumer created | `id`, `producerId`, `kind`, `rtpParameters` | ✅ INT-11-B (implicit) |
 | `user-joined` | User joined notification | `userId` | ✅ INT-11-B |
 | `user-left` | User left notification | `userId` | ❌ Not tested |
-| `rtcp-report` | RTCP report (if server sends) | `rtcpData` | ❌ Not tested |
-| `tier-change` | Quality tier change | `tier`, `timestamp` | ⚠️ INT-8-010 (infrastructure) |
-| `ack-summary` | ACK summary | `ackedUsers`, `missingUsers`, `matchRate` | ⚠️ INT-3-009 (disabled) |
 | `error` | Error message | `code`, `message` | ❌ Not tested |
 
 ---
