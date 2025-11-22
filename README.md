@@ -74,7 +74,7 @@ cd backend
 npm install
 ```
 
-### 3. Running the App
+### 2. Running the App
 
 You need to two separate terminals.
 
