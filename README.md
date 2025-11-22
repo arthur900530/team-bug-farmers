@@ -5,23 +5,19 @@ A modern, real-time audio conferencing application built with React, TypeScript,
 [![Run Frontend Tests](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-frontend-tests.yml/badge.svg)](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-frontend-tests.yml)
 [![Run Backend Tests](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-backend-tests.yml/badge.svg)](https://github.com/arthur900530/team-bug-farmers/actions/workflows/run-backend-tests.yml)
 
-## 🚀 What Makes This Special
+## What Makes This Special
 
-- **🎙️ Real-time Audio Conferencing**: Built with mediasoup SFU for scalable, low-latency audio
-- **📊 Adaptive Quality Control**: Automatically adjusts bitrate based on network conditions
-- **✅ Audio Delivery Verification**: CRC32 fingerprinting to verify audio reception
-- **🎨 Modern UI**: Beautiful, accessible interface with Radix UI and Tailwind CSS
-- **📡 Full-Stack TypeScript**: End-to-end type safety from client to server
-- **☁️ Production Deployed**: Live on AWS (EC2 + Amplify) with SSL/TLS encryption
-- **🔧 Production-Ready Architecture**: Modular, testable, and well-documented
+- **Real-time Audio**: Scalable, low-latency SFU architecture (mediasoup).
+- **Adaptive Quality**: Auto-adjusts bitrate (16/32/64 kbps) based on network conditions.
+- **Delivery Verification**: Uses CRC32 fingerprinting to verify audio reception.
+- **Production Ready**: Deployed on AWS (Amplify + EC2) with full SSL encryption.
 
 ---
 
-## 🎯 Features
+## Core Features
 
-This application implements three core user stories for reliable real-time audio communication:
-
-### **User Story 11: Establishing Initial Audio Connection**
+<details>
+<summary><strong>User Story 11: Establishing Initial Audio Connection</strong></summary>
 > "As a user, I want my audio to be transmitted seamlessly from my device through the server to other participants so that my voice is heard clearly during the call."
 
 **What it does:**
@@ -29,8 +25,10 @@ This application implements three core user stories for reliable real-time audio
 - Real-time audio packet transmission
 - Low-latency audio delivery (<200ms end-to-end)
 - Visual connection status indicators
+</details>
 
-### **User Story 3: Real-Time Audio Feedback**
+<details>
+<summary><strong>User Story 3: Real-Time Audio Feedback</strong></summary>
 > "As a user, I want real-time feedback showing that other participants can hear me so that I can confidently speak without having to ask 'can you hear me?' every call."
 
 **What it does:**
@@ -38,8 +36,10 @@ This application implements three core user stories for reliable real-time audio
 - CRC32 fingerprint verification for audio integrity
 - Visual feedback with success rate percentage
 - Expandable panel showing per-participant delivery status
+</details>
 
-### **User Story 8: Adaptive Quality Management**
+<details>
+<summary><strong>User Story 8: Adaptive Quality Management</strong></summary>
 > "As a user, I want the call to automatically adjust the sender's audio quality to match the worst receiver's connection so that all participants experience consistent quality."
 
 **What it does:**
@@ -48,144 +48,112 @@ This application implements three core user stories for reliable real-time audio
 - RTCP-based network monitoring
 - Dynamic quality adaptation every 5 seconds
 - Color-coded quality status
+</details>
 
 ---
 
-## 🚀 Quick Start
+## Local Development
 
 ### Prerequisites
 
 - **Node.js** 18.x or higher
 - **npm** 9.x or higher
 
-### Installation
+### 1. Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/arthur900530/team-bug-farmers.git
-   cd team-bug-farmers
-   ```
+```ruby
+# Clone repo
+git clone https://github.com/arthur900530/team-bug-farmers.git
+cd team-bug-farmers
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   cd backend && npm install && cd ..
-   ```
+# Install Frontend Dependencies
+npm install
 
-### Running the Application
+# Install Backend Dependencies
+cd backend
+npm install
+```
 
-You need to run **both backend and frontend** servers:
+### 3. Running the App
 
-#### **Terminal 1 - Backend Server**
+You need to two separate terminals.
+
+#### Terminal 1: Backend (Mediasoup)
 ```bash
 cd backend
 npm run build
-WS_PORT=8080 USE_SSL=false npm start
+# ANNOUNCED_IP is crucial for WebRTC. For local, 127.0.0.1 is fine.
+WS_PORT=8080 USE_SSL=false ANNOUNCED_IP=127.0.0.1 npm start
 ```
 
-#### **Terminal 2 - Frontend Server**
+#### Terminal 2: Frontend (React)
 ```bash
+# Tells the frontend where to find the signaling server
 VITE_WS_URL=ws://localhost:8080 npm run dev
 ```
 
-#### **Access the Application (Local Development)**
-
-- **Main App**: http://localhost:5173 (or http://localhost:5174 if 5173 is in use)
-- **Simple Audio Test**: http://localhost:5173/audio-test.html
+**Access**: http://localhost:5173
 
 ---
 
-## 🌐 Production Deployment
+## Production Deployment
 
 The application is deployed in production on AWS infrastructure:
 
 ### **Live Application**
 
-- **Frontend (AWS Amplify)**: Hosted on AWS Amplify with automatic CI/CD from GitHub
-- **Backend (AWS EC2)**: Running on EC2 instance with SSL/TLS encryption
+- **Frontend**: Hosted on **AWS Amplify** with automatic CI/CD from GitHub
+- **Backend**: Hosted on **AWS EC2** (Ubuntu)
+  - _Why EC2?_ We require long-running WebSocket connections and custom UDP port ranges (40000-49999) which AWS Lambda does not support. 
 
-### **Backend Deployment (EC2 + PM2)**
+### Backend Setup (EC2)
 
-The backend is deployed on AWS EC2 and managed with PM2 for process management and auto-restart.
+#### Prerequisites:
+- **OS:** Ubuntu 22.04 LTS
+- **Node.js:** Version 22+ (Required for mediasoup)
+- **Security Groups (Firewall):** You MUST open these ports:
+  - `TCP 443` (HTTPS/WebSocket)
+  - `TCP 80` (Certbot verification)
+  - `TCP 22` (SSH)
+  - `UDP 40000-49999` (Media Traffic - Critical)
 
-#### **PM2 Commands**
+#### Deployment Commands
 
+1. **Setup & Build**
 ```bash
-# Start the backend with PM2
-cd backend
+git clone https://github.com/arthur900530/team-bug-farmers.git
+cd team-bug-farmers/backend
+npm ci
 npm run build
-pm2 start dist/server.js --name "webrtc-backend" -i 1
-
-# View logs
-pm2 logs webrtc-backend
-
-# Monitor status
-pm2 status
-
-# Restart the backend
-pm2 restart webrtc-backend
-
-# Stop the backend
-pm2 stop webrtc-backend
-
-# Delete from PM2
-pm2 delete webrtc-backend
-
-# Save PM2 configuration (persist across reboots)
-pm2 save
-pm2 startup
 ```
 
-#### **SSL/TLS Configuration**
-
-The EC2 instance is configured with:
-- **SSL Certificates**: Let's Encrypt or AWS Certificate Manager
-- **Secure WebSocket**: `wss://` (WebSocket Secure) for encrypted signaling
-- **HTTPS**: Backend health endpoints served over HTTPS
-- **Auto-renewal**: Certificate auto-renewal configured
-
-#### **Environment Variables (Production)**
-
-Set these on the EC2 instance:
-
+2. **SSL Certificate**
 ```bash
-# Backend Configuration
-export WS_PORT=8080
-export USE_SSL=true
-export SSL_CERT_PATH=/path/to/cert.pem
-export SSL_KEY_PATH=/path/to/key.pem
+sudo apt install certbot
+# We recommend using nip.io if you don't have a domain (e.g., your-ip.nip.io)
+sudo certbot certonly --standalone -d YOUR_DOMAIN
 ```
 
-### **Frontend Deployment (AWS Amplify)**
-
-The frontend is automatically deployed to AWS Amplify:
-
-1. **GitHub Integration**: Automatic builds on push to `main` branch
-2. **Build Settings**: Vite build configuration optimized for production
-3. **Environment Variables**: `VITE_WS_URL` configured to point to backend WSS URL
-4. **CDN Distribution**: Global content delivery via AWS CloudFront
-5. **HTTPS**: Automatic SSL certificate and HTTPS enforcement
-
-#### **Amplify Build Configuration**
-
-```yaml
-version: 1
-frontend:
-  phases:
-    preBuild:
-      commands:
-        - npm install
-    build:
-      commands:
-        - npm run build
-  artifacts:
-    baseDirectory: dist
-    files:
-      - '**/*'
-  cache:
-    paths:
-      - node_modules/**/*
+3. **Start Server (PM2)**
+```bash
+# Replace the paths and IP with your actual values
+sudo \
+WS_PORT=443 \
+USE_SSL=true \
+SSL_CERT_PATH=/etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem \
+SSL_KEY_PATH=/etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem \
+ANNOUNCED_IP=YOUR_PUBLIC_IP \
+pm2 start dist/server.js --name "webrtc-backend"
 ```
+
+### Frontend Setup (Amplify)
+1. Connect repository to AWS Amplify.
+- By default, do not select monorepo as it will use the root and look for the `Amplify.yml` file.
+3. Set Environment Variable in Amplify Console:
+- `VITE_WS_URL`: `wss://YOUR_DOMAIN` (Must be WSS for production).
+3. Deploy.
+
+---
 
 ### **Production Architecture**
 
