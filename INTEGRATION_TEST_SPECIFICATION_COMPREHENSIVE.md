@@ -432,7 +432,6 @@ Frontend                    Backend
 
 - **Firefox Tests:** Skipped in CI due to fake media stream limitations in Playwright
 - **RTCP Data:** Currently sends dummy data (all zeros)
-- **Leave Meeting:** Not tested
 - **Reconnection:** Not tested
 - **Concurrent Meetings:** Not tested
 - **Invalid Messages:** Not tested
@@ -442,8 +441,7 @@ Frontend                    Backend
 ### 9.2 Recommended Additional Tests
 
 #### **High Priority:**
-1. **Leave Meeting Flow** - Test user leaving and cleanup
-2. **Error Handling** - Test invalid messages, connection failures
+1. **Error Handling** - Test invalid messages, connection failures
 3. **Reconnection** - Test WebSocket reconnection after disconnect
 4. **Concurrent Meetings** - Test multiple independent meetings
 
@@ -507,7 +505,6 @@ npx playwright test adaptive-quality.spec.ts
 | `produce` | Start producing audio | `kind`, `rtpParameters` | ✅ INT-11-A, INT-11-B (implicit) |
 | `consume` | Start consuming audio | `producerId` | ✅ INT-11-B (implicit) |
 | `rtcp-report` | Send RTCP statistics | `meetingId`, `userId`, `rtcpData` | ✅ INT-8-001, INT-8-002, INT-8-005 |
-| `leave` | Leave meeting | `meetingId`, `userId` | ❌ Not tested |
 
 ### 11.2 Server → Client Messages
 
@@ -521,8 +518,6 @@ npx playwright test adaptive-quality.spec.ts
 | `newProducer` | New producer notification | `producerUserId`, `producerId` | ✅ INT-11-B |
 | `consumed` | Consumer created | `id`, `producerId`, `kind`, `rtpParameters` | ✅ INT-11-B (implicit) |
 | `user-joined` | User joined notification | `userId` | ✅ INT-11-B |
-| `user-left` | User left notification | `userId` | ❌ Not tested |
-| `error` | Error message | `code`, `message` | ❌ Not tested |
 
 ---
 
