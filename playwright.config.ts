@@ -69,7 +69,12 @@ export default defineConfig({
       },
     },
 
-    {
+    // Firefox: Skip in CI due to fake media stream limitations
+    // Firefox's fake media stream support in Playwright is unreliable in CI/headless environments.
+    // The media.navigator.streams.fake preference doesn't work consistently.
+    // Firefox tests are still available for local development.
+    // See: https://github.com/microsoft/playwright/issues/16621
+    ...(process.env.CI ? [] : [{
       name: 'firefox',
       use: { 
         ...devices['Desktop Firefox'],
@@ -95,6 +100,6 @@ export default defineConfig({
           },
         },
       },
-    },
+    }]),
   ],
 });
