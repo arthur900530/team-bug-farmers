@@ -1,8 +1,19 @@
 # Integration Test Specification: Frontend-Backend System
 
-**Document Version:** 1.0  
+**⚠️ DEPRECATED - This document is outdated and superseded by `INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md`**
+
+**Document Version:** 1.0 (DEPRECATED)  
 **Date:** November 14, 2024  
+**Superseded By:** `INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md` (v2.0, November 21, 2025)  
 **Project:** WebRTC Audio Conferencing System
+
+**Why Deprecated:**
+- This spec uses the old SDP/ICE approach (pre-mediasoup)
+- Test IDs don't match actual implementation (uses INT-11-001 vs actual INT-11-A)
+- New comprehensive spec is based on actual passing tests (9 Chromium tests)
+- New spec accurately reflects mediasoup-based architecture
+
+**Please refer to `INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md` for the current, accurate test specification.**
 
 ---
 

@@ -1,3 +1,11 @@
+/**
+ * User Story 11: Initial Audio Connection Integration Tests
+ * 
+ * Test specification: INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md
+ * 
+ * Tests verify complete join flow and multi-user meeting scenarios.
+ */
+
 import { test, expect } from '@playwright/test';
 
 test.describe('User Story 11: Initial Audio Connection', () => {

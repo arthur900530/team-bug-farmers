@@ -46,7 +46,7 @@ This plan outlines the **4 phases** required to go from our current state (separ
 
 ## 🧪 Integration Test Specification (Refined for Automation)
 
-This section details the specific tests to be implemented, aligned with the `INTEGRATION_TEST_SPECIFICATION.md` but structured for automated execution.
+This section details the specific tests to be implemented, aligned with the `INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md` but structured for automated execution.
 
 ### Test Suite 1: Connection & Signaling (User Story 11)
 

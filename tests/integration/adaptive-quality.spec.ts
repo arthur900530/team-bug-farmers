@@ -4,13 +4,13 @@ import { test, expect } from '@playwright/test';
  * User Story 8: Adaptive Quality Control Integration Tests
  * 
  * NOTE: These tests verify the end-to-end adaptive quality control flow as specified in
- * INTEGRATION_TEST_SPECIFICATION.md section 3.3.
+ * INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.3.
  * 
  * IMPORTANT: RTCP reporting is currently implemented but sends dummy data (all zeros).
  * The tests will verify the infrastructure and message flow, but actual quality decisions
  * require real RTCP statistics.
  * 
- * Test Coverage (from INTEGRATION_TEST_SPECIFICATION.md):
+ * Test Coverage (from INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md):
  * - INT-8-001 to INT-8-004: RTCP Statistics Collection
  * - INT-8-005 to INT-8-009: Quality Tier Decision
  * - INT-8-010 to INT-8-014: Tier Change Notification & Application
@@ -20,7 +20,7 @@ test.describe('User Story 8: Adaptive Quality Control', () => {
   
   test('INT-8-001 to INT-8-004: RTCP Statistics Collection', async ({ page }) => {
     // Test: Verify RTCP report generation and transmission
-    // From INTEGRATION_TEST_SPECIFICATION.md lines 164-167
+    // From INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.3
     
     // 1. Navigate and join meeting
     await page.goto('/');
@@ -71,7 +71,7 @@ test.describe('User Story 8: Adaptive Quality Control', () => {
 
   test('INT-8-002: RTCP Report Transmission Rate', async ({ page }) => {
     // Test: Verify RTCP reports are sent at correct interval
-    // From INTEGRATION_TEST_SPECIFICATION.md line 165
+    // From INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.3
     // Spec says every 2 seconds, but implementation uses 5 seconds
     
     await page.goto('/');
@@ -112,7 +112,7 @@ test.describe('User Story 8: Adaptive Quality Control', () => {
 
   test('INT-8-010 to INT-8-011: Tier Change Notification', async ({ browser }) => {
     // Test: Verify tier change notification transmission and reception
-    // From INTEGRATION_TEST_SPECIFICATION.md lines 183-184
+    // From INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.3
     
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
@@ -178,7 +178,7 @@ test.describe('User Story 8: Adaptive Quality Control', () => {
 
   test('INT-8-005 to INT-8-009: Quality Tier Decision (Backend Verification)', async ({ page }) => {
     // Test: Verify backend receives RTCP reports and can make quality decisions
-    // From INTEGRATION_TEST_SPECIFICATION.md lines 173-177
+    // From INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.3
     // 
     // NOTE: This test verifies the frontend sends RTCP reports.
     // Actual tier decision logic is tested in backend unit tests.

@@ -500,7 +500,8 @@ Runs both backend and frontend checks.
 
 ## 📚 Additional Resources
 
-- **Integration Test Specification:** `INTEGRATION_TEST_SPECIFICATION.md`
+- **Integration Test Specification:** `INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md` (current, authoritative)
+- **Legacy Specification:** `INTEGRATION_TEST_SPECIFICATION.md` (deprecated, kept for reference)
 - **Integration Test Planning:** `INTEGRATION_TEST_PLANNING.md`
 - **Local vs Cloud Testing:** `LOCAL_VS_CLOUD_TESTING.md`
 - **Phase 3 Health Checks:** `PHASE_3_HEALTH_CHECKS.md`

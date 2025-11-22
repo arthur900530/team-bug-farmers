@@ -4,14 +4,14 @@ import { test, expect } from '@playwright/test';
  * User Story 3: Audio Fingerprinting Integration Tests
  * 
  * NOTE: These tests verify the end-to-end fingerprinting flow as specified in
- * INTEGRATION_TEST_SPECIFICATION.md section 3.2.
+ * INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.2.
  * 
  * IMPORTANT: Fingerprinting is currently DISABLED in UserClient.ts (commented out).
  * These tests will FAIL until fingerprinting is enabled. They serve as:
  * 1. Documentation of expected behavior
  * 2. Verification once fingerprinting is implemented
  * 
- * Test Coverage (from INTEGRATION_TEST_SPECIFICATION.md):
+ * Test Coverage (from INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md):
  * - INT-3-001 to INT-3-004: Sender Fingerprint Flow
  * - INT-3-005 to INT-3-008: Receiver Fingerprint Flow  
  * - INT-3-009 to INT-3-012: ACK Summary Generation & Delivery
@@ -21,7 +21,7 @@ test.describe('User Story 3: Audio Fingerprinting', () => {
   
   test('INT-3-001 to INT-3-004: Sender Fingerprint Generation and Transmission', async ({ page }) => {
     // Test: Verify sender fingerprint generation and transmission
-    // From INTEGRATION_TEST_SPECIFICATION.md lines 133-136
+    // From INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.2
     
     // 1. Navigate and join meeting
     await page.goto('/');
@@ -63,7 +63,7 @@ test.describe('User Story 3: Audio Fingerprinting', () => {
 
   test('INT-3-005 to INT-3-008: Receiver Fingerprint Generation and Verification', async ({ browser }) => {
     // Test: Verify receiver fingerprint generation and backend verification
-    // From INTEGRATION_TEST_SPECIFICATION.md lines 142-145
+    // From INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.2
     
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
@@ -119,7 +119,7 @@ test.describe('User Story 3: Audio Fingerprinting', () => {
 
   test('INT-3-009 to INT-3-012: ACK Summary Generation and Delivery', async ({ browser }) => {
     // Test: Verify ACK summary generation and delivery to sender
-    // From INTEGRATION_TEST_SPECIFICATION.md lines 151-154
+    // From INTEGRATION_TEST_SPECIFICATION_COMPREHENSIVE.md section 4.2
     
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
