@@ -149,7 +149,7 @@ pm2 start dist/server.js --name "webrtc-backend"
 ### Frontend Setup (Amplify)
 1. Connect repository to AWS Amplify.
 - By default, do not select monorepo as it will use the root and look for the `Amplify.yml` file.
-3. Set Environment Variable in Amplify Console:
+2. Set Environment Variable in Amplify Console:
 - `VITE_WS_URL`: `wss://YOUR_DOMAIN` (Must be WSS for production).
 3. Deploy.
 
