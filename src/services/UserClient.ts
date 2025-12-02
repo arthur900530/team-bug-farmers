@@ -129,7 +129,11 @@ export class UserClient {
       this.mediasoupClient.onConnectionStateChange((state) => {
         console.log(`[UserClient] mediasoup connection state: ${state}`);
         if (state === 'connected') {
-          this.updateConnectionState('Connected');
+          // Don't downgrade from 'Streaming' to 'Connected'
+          // 'Streaming' is the final successful state
+          if (this.connectionState !== 'Streaming') {
+            this.updateConnectionState('Connected');
+          }
         } else if (state === 'failed' || state === 'disconnected') {
           this.updateConnectionState('Disconnected');
         }
