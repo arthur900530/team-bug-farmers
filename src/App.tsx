@@ -8,7 +8,7 @@ import { AudioSettings } from './components/AudioSettings';
 import { AllSettings } from './components/AllSettings';
 import { ScreenShareSettings } from './components/ScreenShareSettings';
 import { UserClient } from './services/UserClient';
-import type { QualityTier, AckSummary, UserSession, ConnectionState } from './types';
+import type { QualityTier, UserSession, ConnectionState } from './types';
 
 type Screen = 
   | 'join' 
@@ -36,7 +36,6 @@ export default function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('Disconnected');
   const [currentTier, setCurrentTier] = useState<QualityTier>('HIGH');
   const [participants, setParticipants] = useState<UserSession[]>([]);
-  const [_ackSummary, _setAckSummary] = useState<AckSummary | null>(null);
   
   // UserClient instance for real backend connection
   const userClientRef = useRef<UserClient | null>(null);
@@ -222,7 +221,6 @@ export default function App() {
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
               currentTier={currentTier}
-              ackSummary={null}
               participants={participants}
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
@@ -247,7 +245,6 @@ export default function App() {
             onMicToggle={handleMicToggle}
             onMicSettings={handleMicSettings}
             currentTier={currentTier}
-            ackSummary={null}
             participants={participants}
             currentUserId={currentUserId || undefined}
             connectionState={connectionState}
@@ -266,7 +263,6 @@ export default function App() {
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
               currentTier={currentTier}
-              ackSummary={null}
               participants={participants}
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
@@ -313,7 +309,6 @@ export default function App() {
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
               currentTier={currentTier}
-              ackSummary={null}
               participants={participants}
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
@@ -337,7 +332,6 @@ export default function App() {
               onMicToggle={handleMicToggle}
               onMicSettings={handleMicSettings}
               currentTier={currentTier}
-              ackSummary={null}
               participants={participants}
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}

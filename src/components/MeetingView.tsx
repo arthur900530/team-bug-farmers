@@ -3,11 +3,10 @@ import { Users } from 'lucide-react';
 import { WindowControls } from './common/WindowControls';
 import { MeetingToolbar } from './meeting/MeetingToolbar';
 import { QualityIndicator } from './meeting/QualityIndicator';
-import { AckIndicator } from './meeting/AckIndicator';
 import { ParticipantList } from './meeting/ParticipantList';
 import { ConnectionStatus } from './meeting/ConnectionStatus';
 import { ServerAudioIndicator } from './meeting/ServerAudioIndicator';
-import type { QualityTier, AckSummary, UserSession, ConnectionState } from '../types';
+import type { QualityTier, UserSession, ConnectionState } from '../types';
 
 interface MeetingViewProps {
   micMuted: boolean;
@@ -18,7 +17,6 @@ interface MeetingViewProps {
   onMicSettings: () => void;
   // New props from Dev Spec
   currentTier?: QualityTier;
-  ackSummary?: AckSummary | null;
   participants?: UserSession[];
   currentUserId?: string;
   connectionState?: ConnectionState;
@@ -33,7 +31,6 @@ export function MeetingView({
   onMicToggle, 
   onMicSettings,
   currentTier = 'HIGH',
-  ackSummary = null,
   participants = [],
   currentUserId,
   connectionState = 'Streaming',
@@ -64,10 +61,9 @@ export function MeetingView({
         </div>
       </div>
 
-      {/* Quality & ACK Indicators - Top Right */}
+      {/* Quality & Status Indicators - Top Right */}
       <div className="absolute top-14 right-4 z-10 space-y-2">
         <QualityIndicator tier={currentTier} />
-        <AckIndicator summary={ackSummary} />
         
         {/* Server Audio Transmission Indicator */}
         {/* Shows when audio is being transmitted through server (User Story 11) */}
