@@ -1408,42 +1408,71 @@ export class SignalingServer {
     const meetingId = clientConn.meetingId;
     const { kind, rtpParameters } = message;
 
-    console.log(`[SignalingServer] User ${userId} producing ${kind}`);
+    console.log(`[SignalingServer] User ${userId} producing ${kind} in meeting ${meetingId}`);
 
     const transportId = this.pendingTransportIds.get(userId);
     if (!transportId) {
-      this.sendError(ws, 400, 'No transport found');
+      console.error(`[SignalingServer] ❌ No transport found for user ${userId}. Available transports:`, Array.from(this.pendingTransportIds.keys()));
+      this.sendError(ws, 400, 'No transport found. Transport must be created before producing.');
       return;
     }
 
-    const producer = await this.mediasoupManager.createProducer(userId, transportId, rtpParameters);
-    
-    this.sendMessage(ws, {
-      type: 'produced',
-      id: producer.id
-    });
+    console.log(`[SignalingServer] Found transport ${transportId} for user ${userId}`);
 
-    // Notify other participants about new producer
-    await this.notifyNewProducer(userId, meetingId);
+    try {
+      const producer = await this.mediasoupManager.createProducer(userId, transportId, rtpParameters);
+      
+      console.log(`[SignalingServer] ✅ Producer created successfully for user ${userId} (Producer ID: ${producer.id})`);
+      
+      this.sendMessage(ws, {
+        type: 'produced',
+        id: producer.id
+      });
+
+      // Notify other participants about new producer
+      console.log(`[SignalingServer] Notifying other participants about producer from ${userId}`);
+      await this.notifyNewProducer(userId, meetingId);
+      console.log(`[SignalingServer] ✅ Producer notification completed for user ${userId}`);
+    } catch (error) {
+      console.error(`[SignalingServer] ❌ Failed to create producer for user ${userId}:`, error);
+      this.sendError(ws, 500, `Failed to create producer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   private async notifyNewProducer(producerUserId: string, meetingId: string): Promise<void> {
     const allParticipants = this.meetingRegistry.listRecipients(meetingId);
+    const producer = this.mediasoupManager.getProducer(producerUserId);
     
+    if (!producer) {
+      console.warn(`[SignalingServer] ⚠️ Cannot notify: Producer not found for user ${producerUserId}`);
+      return;
+    }
+    
+    console.log(`[SignalingServer] Notifying ${allParticipants.length - 1} participant(s) about producer from ${producerUserId} (Producer ID: ${producer.id})`);
+    
+    let notifiedCount = 0;
     for (const participant of allParticipants) {
       if (participant.userId !== producerUserId) {
         const participantWs = this.findClientWebSocket(participant.userId);
         if (participantWs) {
-          console.log(`[SignalingServer] Notifying ${participant.userId} about new producer from ${producerUserId}`);
-          const producer = this.mediasoupManager.getProducer(producerUserId);
-          this.sendMessage(participantWs, {
-            type: 'newProducer',
-            producerId: producer?.id,
-            producerUserId
-          });
+          if (participantWs.readyState === WebSocket.OPEN) {
+            console.log(`[SignalingServer] ✅ Sending newProducer message to ${participant.userId} (WebSocket OPEN)`);
+            this.sendMessage(participantWs, {
+              type: 'newProducer',
+              producerId: producer.id,
+              producerUserId
+            });
+            notifiedCount++;
+          } else {
+            console.warn(`[SignalingServer] ⚠️ Cannot notify ${participant.userId}: WebSocket not open (state: ${participantWs.readyState})`);
+          }
+        } else {
+          console.warn(`[SignalingServer] ⚠️ Cannot notify ${participant.userId}: WebSocket not found`);
         }
       }
     }
+    
+    console.log(`[SignalingServer] ✅ Notified ${notifiedCount} participant(s) about producer from ${producerUserId}`);
   }
 
   private async handleConsumeRequest(ws: WebSocket, message: any): Promise<void> {
