@@ -5,7 +5,6 @@ import { MeetingToolbar } from './meeting/MeetingToolbar';
 import { QualityIndicator } from './meeting/QualityIndicator';
 import { ParticipantList } from './meeting/ParticipantList';
 import { ConnectionStatus } from './meeting/ConnectionStatus';
-import { ServerAudioIndicator } from './meeting/ServerAudioIndicator';
 import { RtpStatsIndicator, type RtpStats } from './meeting/RtpStatsIndicator';
 import type { QualityTier, UserSession, ConnectionState } from '../types';
 
@@ -68,14 +67,7 @@ export function MeetingView({
       <div className="absolute top-14 right-4 z-10 space-y-2">
         <QualityIndicator tier={currentTier} />
         
-        {/* Server Audio Transmission Indicator */}
-        {/* Shows when audio is being transmitted through server (User Story 11) */}
-        <ServerAudioIndicator 
-          connectionState={connectionState}
-          micMuted={micMuted}
-        />
-        
-        {/* RTP Packet Delivery Feedback */}
+        {/* Audio Delivery Feedback */}
         <RtpStatsIndicator stats={rtpStats} />
         
         {/* Participants Toggle */}
