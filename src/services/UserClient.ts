@@ -119,11 +119,22 @@ export class UserClient {
       await this.mediasoupClient.initialize();
       console.log('[UserClient] Step 4: ✅ mediasoup Device initialized');
       
-      // Step 5: Start producing audio
-      console.log('[UserClient] Step 5: Starting audio production...');
-      this.updateConnectionState('Offering');
+      // Step 5: Setup callbacks BEFORE producing to avoid race conditions
+      // CRITICAL: Set up onNewProducer callback BEFORE starting production
+      // This ensures we can receive notifications about existing producers immediately
+      this.signalingClient.onNewProducer = async (producerUserId, producerId) => {
+        console.log(`[UserClient] 🎤 New producer detected: ${producerId} from ${producerUserId}`);
+        if (producerUserId !== this.userId && this.mediasoupClient) {
+          try {
+            await this.mediasoupClient.consume(producerUserId, producerId);
+            console.log(`[UserClient] ✅ Successfully consuming from ${producerUserId}`);
+          } catch (error) {
+            console.error(`[UserClient] ❌ Failed to consume from ${producerUserId}:`, error);
+          }
+        }
+      };
       
-      // Setup callbacks
+      // Setup other callbacks
       this.mediasoupClient.onTrack((track, producerUserId) => {
         console.log(`[UserClient] 🎵🎵🎵 Received track from user ${producerUserId}`);
         this.handleRemoteTrack(track, producerUserId);
@@ -142,17 +153,11 @@ export class UserClient {
         }
       });
       
-      // Start producing
+      // Step 6: Start producing audio (callback is already set up above)
+      console.log('[UserClient] Step 5: Starting audio production...');
+      this.updateConnectionState('Offering');
       await this.mediasoupClient.startProducing();
       console.log('[UserClient] Step 5: ✅ Audio production started');
-      
-      // Step 6: Listen for new producers from other users
-      this.signalingClient.onNewProducer = async (producerUserId, producerId) => {
-        console.log(`[UserClient] 🎤 New producer detected: ${producerId} from ${producerUserId}`);
-        if (producerUserId !== this.userId && this.mediasoupClient) {
-          await this.mediasoupClient.consume(producerUserId, producerId);
-        }
-      };
       
       // Step 7: Connection established and streaming
       this.updateConnectionState('Streaming');
