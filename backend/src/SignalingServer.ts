@@ -463,43 +463,9 @@ export class SignalingServer {
           this.pendingTransportIds.delete(userId);
           console.log(`[SignalingServer] Producer created for user ${userId}`);
           
-          // Create Consumers for all existing users to receive from this new Producer
-          // From dev_specs/architecture.md: SFU forwards audio to all receivers
-          const allParticipants = this.meetingRegistry.listRecipients(meetingId);
-          for (const receiver of allParticipants) {
-            if (receiver.userId !== userId) {
-              // Only create Consumer if receiver has RTP capabilities
-              const receiverRtpCapabilities = this.userRtpCapabilities.get(receiver.userId);
-              if (receiverRtpCapabilities) {
-                try {
-                  const consumer = await this.mediasoupManager.createConsumer(
-                    receiver.userId,
-                    userId,
-                    receiverRtpCapabilities
-                  );
-                  if (consumer) {
-                    console.log(`[SignalingServer] Consumer created for existing user ${receiver.userId} to receive from ${userId}`);
-                    
-                    // CRITICAL FIX: Notify receiver about the new consumer
-                    // The receiver needs to know about the incoming track AND RTP parameters
-                    const receiverWs = this.findClientWebSocket(receiver.userId);
-                    if (receiverWs) {
-                      console.log(`[SignalingServer] Notifying ${receiver.userId} about new consumer from ${userId}`);
-                      console.log(`[SignalingServer] Consumer SSRC: ${consumer.rtpParameters?.encodings?.[0]?.ssrc || 'unknown'}`);
-                      this.sendMessage(receiverWs, {
-                        type: 'new-track',
-                        senderUserId: userId,
-                        consumerId: consumer.id,
-                        rtpParameters: consumer.rtpParameters
-                      });
-                    }
-                  }
-                } catch (error) {
-                  console.error(`[SignalingServer] Error creating consumer for existing user ${receiver.userId} → ${userId}:`, error);
-                }
-              }
-            }
-          }
+          // Notify existing users about the new producer
+          // Using mediasoup-client protocol: send newProducer message, clients will call consume()
+          await this.notifyNewProducer(userId, meetingId);
         } catch (error) {
           console.error(`[SignalingServer] Failed to create Producer for user ${userId}:`, error);
           // Don't fail the entire connection if Producer creation fails
@@ -1240,16 +1206,10 @@ export class SignalingServer {
    * From dev_specs/architecture.md line 65: "FWD == RTP: Selected tier only ==> UB"
    * From dev_specs/flow_charts.md line 95: "RtpReceiver.onRtp - EncodedFrame"
    * 
-   * When a user joins, create consumers to receive audio from all other participants
+   * When a user joins, notify them about existing producers so they can consume
+   * Using mediasoup-client protocol: client calls consume() after receiving newProducer message
    */
   private async createConsumersForUser(receiverUserId: string, meetingId: string): Promise<void> {
-    // Get receiver's RTP capabilities
-    const receiverRtpCapabilities = this.userRtpCapabilities.get(receiverUserId);
-    if (!receiverRtpCapabilities) {
-      console.warn(`[SignalingServer] No RTP capabilities found for user ${receiverUserId}, cannot create Consumers`);
-      return;
-    }
-
     // Get all other participants in the meeting
     const otherParticipants = this.meetingRegistry.listRecipients(meetingId, receiverUserId);
     
@@ -1258,43 +1218,27 @@ export class SignalingServer {
       return;
     }
 
-    console.log(`[SignalingServer] Creating consumers for ${receiverUserId} to receive from ${otherParticipants.length} participants`);
+    console.log(`[SignalingServer] Notifying ${receiverUserId} about ${otherParticipants.length} existing producers`);
 
-    // For each sender, create a consumer
-    // From dev_specs/architecture.md: SFU forwards selected tier to receiver
+    // For each sender with a producer, notify the new user so they can consume
+    // Using mediasoup-client protocol: send newProducer message, client will call consume()
+    const receiverWs = this.findClientWebSocket(receiverUserId);
+    if (!receiverWs) {
+      console.warn(`[SignalingServer] Cannot notify ${receiverUserId}: WebSocket not found`);
+      return;
+    }
+
     for (const sender of otherParticipants) {
       const producer = this.mediasoupManager.getProducer(sender.userId);
       if (producer) {
-        try {
-          const consumer = await this.mediasoupManager.createConsumer(
-            receiverUserId,
-            sender.userId,
-            receiverRtpCapabilities
-          );
-          
-          if (consumer) {
-            console.log(`[SignalingServer] Consumer created: ${sender.userId} → ${receiverUserId} (Consumer ID: ${consumer.id})`);
-            
-            // CRITICAL FIX: Notify receiver about the new consumer AND RTP parameters
-            const receiverWs = this.findClientWebSocket(receiverUserId);
-            if (receiverWs) {
-              console.log(`[SignalingServer] Notifying ${receiverUserId} about new consumer from ${sender.userId}`);
-              console.log(`[SignalingServer] Consumer SSRC: ${consumer.rtpParameters?.encodings?.[0]?.ssrc || 'unknown'}`);
-              this.sendMessage(receiverWs, {
-                type: 'new-track',
-                senderUserId: sender.userId,
-                consumerId: consumer.id,
-                rtpParameters: consumer.rtpParameters
-              });
-            }
-          } else {
-            console.warn(`[SignalingServer] Failed to create consumer for ${sender.userId} → ${receiverUserId}`);
-          }
-        } catch (error) {
-          console.error(`[SignalingServer] Error creating consumer ${sender.userId} → ${receiverUserId}:`, error);
-        }
+        console.log(`[SignalingServer] Notifying ${receiverUserId} about existing producer from ${sender.userId}`);
+        this.sendMessage(receiverWs, {
+          type: 'newProducer',
+          producerId: producer.id,
+          producerUserId: sender.userId
+        });
       } else {
-        console.log(`[SignalingServer] No producer found for sender ${sender.userId}, skipping consumer creation`);
+        console.log(`[SignalingServer] No producer found for sender ${sender.userId}, skipping notification`);
       }
     }
   }

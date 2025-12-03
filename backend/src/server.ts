@@ -122,9 +122,9 @@ console.log('===========================================');
     // Start HTTP/HTTPS server
     httpServer.listen(WS_PORT, () => {
       const protocol = USE_SSL ? 'wss' : 'ws';
-      console.log('✅ Server ready for WebSocket connections');
+    console.log('✅ Server ready for WebSocket connections');
       console.log(`   Connect at: ${protocol}://localhost:${WS_PORT}`);
-      console.log('===========================================\n');
+    console.log('===========================================\n');
     });
 
     // Graceful shutdown
