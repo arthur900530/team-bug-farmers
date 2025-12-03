@@ -1429,10 +1429,17 @@ export class SignalingServer {
         id: producer.id
       });
 
-      // Notify other participants about new producer
+      // Notify other participants about new producer (so they can consume from this user)
       console.log(`[SignalingServer] Notifying other participants about producer from ${userId}`);
       await this.notifyNewProducer(userId, meetingId);
       console.log(`[SignalingServer] ✅ Producer notification completed for user ${userId}`);
+      
+      // CRITICAL: Notify this user about existing producers (so they can consume from others)
+      // This was previously done in handleAnswer, but with mediasoup-client protocol,
+      // handleAnswer is not called. We need to do it here after the producer is created.
+      console.log(`[SignalingServer] Notifying ${userId} about existing producers in meeting`);
+      await this.createConsumersForUser(userId, meetingId);
+      console.log(`[SignalingServer] ✅ Existing producer notification completed for user ${userId}`);
     } catch (error) {
       console.error(`[SignalingServer] ❌ Failed to create producer for user ${userId}:`, error);
       this.sendError(ws, 500, `Failed to create producer: ${error instanceof Error ? error.message : 'Unknown error'}`);
