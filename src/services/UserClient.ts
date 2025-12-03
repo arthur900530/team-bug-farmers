@@ -45,6 +45,9 @@ export class UserClient {
   // User Story 8: RTCP reporting state
   private rtcpReportingInterval: NodeJS.Timeout | null = null;
   private onTierChangeCallback?: (tier: 'LOW' | 'MEDIUM' | 'HIGH') => void;
+  
+  // RTP delivery feedback callback
+  private onRtpStatsCallback?: (stats: { lossPct: number; jitterMs: number; rttMs: number; packetsSent: number; packetsReceived: number }) => void;
 
   constructor(userId: string, meetingId: string, displayName: string = '') {
     this.userId = userId;
@@ -360,20 +363,30 @@ export class UserClient {
   }
 
   /**
-   * Send RTCP report
+   * Send RTCP report with real stats from mediasoup transport
    */
   private async sendRtcpReport(): Promise<void> {
-    // For now, send dummy data
-    // In full implementation, get stats from mediasoup transport
+    let stats = { lossPct: 0, jitterMs: 0, rttMs: 0, packetsSent: 0, packetsReceived: 0 };
+    
+    // Get real stats from mediasoup transport
+    if (this.mediasoupClient) {
+      stats = await this.mediasoupClient.getStats();
+    }
+    
     const report: RtcpReport = {
       userId: this.userId,
-      lossPct: 0.0,
-      jitterMs: 0.0,
-      rttMs: 0.0,
+      lossPct: stats.lossPct,
+      jitterMs: stats.jitterMs,
+      rttMs: stats.rttMs,
       timestamp: Date.now()
     };
     
     this.signalingClient.sendRtcpReport(report);
+    
+    // Notify UI callback with full stats
+    if (this.onRtpStatsCallback) {
+      this.onRtpStatsCallback(stats);
+    }
   }
 
   /**
@@ -440,6 +453,13 @@ export class UserClient {
 
   isConnected(): boolean {
     return this.isJoined && this.connectionState === 'Connected';
+  }
+
+  /**
+   * Set callback for RTP stats updates (packet delivery feedback)
+   */
+  setOnRtpStats(callback: (stats: { lossPct: number; jitterMs: number; rttMs: number; packetsSent: number; packetsReceived: number }) => void): void {
+    this.onRtpStatsCallback = callback;
   }
 }
 

@@ -6,6 +6,7 @@ import { QualityIndicator } from './meeting/QualityIndicator';
 import { ParticipantList } from './meeting/ParticipantList';
 import { ConnectionStatus } from './meeting/ConnectionStatus';
 import { ServerAudioIndicator } from './meeting/ServerAudioIndicator';
+import { RtpStatsIndicator, type RtpStats } from './meeting/RtpStatsIndicator';
 import type { QualityTier, UserSession, ConnectionState } from '../types';
 
 interface MeetingViewProps {
@@ -21,6 +22,7 @@ interface MeetingViewProps {
   currentUserId?: string;
   connectionState?: ConnectionState;
   displayName?: string;
+  rtpStats?: RtpStats | null;
 }
 
 export function MeetingView({ 
@@ -34,7 +36,8 @@ export function MeetingView({
   participants = [],
   currentUserId,
   connectionState = 'Streaming',
-  displayName = 'User'
+  displayName = 'User',
+  rtpStats = null
 }: MeetingViewProps) {
   const [showParticipants, setShowParticipants] = useState(false);
 
@@ -71,6 +74,9 @@ export function MeetingView({
           connectionState={connectionState}
           micMuted={micMuted}
         />
+        
+        {/* RTP Packet Delivery Feedback */}
+        <RtpStatsIndicator stats={rtpStats} />
         
         {/* Participants Toggle */}
         <button

@@ -36,6 +36,7 @@ export default function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('Disconnected');
   const [currentTier, setCurrentTier] = useState<QualityTier>('HIGH');
   const [participants, setParticipants] = useState<UserSession[]>([]);
+  const [rtpStats, setRtpStats] = useState<{ lossPct: number; jitterMs: number; rttMs: number; packetsSent: number; packetsReceived: number } | null>(null);
   
   // UserClient instance for real backend connection
   const userClientRef = useRef<UserClient | null>(null);
@@ -116,6 +117,12 @@ export default function App() {
           ...p,
           qualityTier: tier
         })));
+      });
+      
+      // Set up RTP stats callback for packet delivery feedback
+      userClient.setOnRtpStats((stats) => {
+        setRtpStats(stats);
+        console.log('[App] RTP stats updated:', stats);
       });
       
       // Join meeting using UserClient
@@ -225,6 +232,7 @@ export default function App() {
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
               displayName={displayName || currentUserId || 'User'}
+              rtpStats={rtpStats}
             />
             <AudioDeviceErrorModal
               onClose={handleCloseAudioDeviceError}
@@ -249,6 +257,7 @@ export default function App() {
             currentUserId={currentUserId || undefined}
             connectionState={connectionState}
             displayName={displayName || currentUserId || 'User'}
+            rtpStats={rtpStats}
           />
         );
       
@@ -267,6 +276,7 @@ export default function App() {
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
               displayName={displayName || currentUserId || 'User'}
+              rtpStats={rtpStats}
             />
             {/* Backdrop */}
             <div 
@@ -313,6 +323,7 @@ export default function App() {
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
               displayName={displayName || currentUserId || 'User'}
+              rtpStats={rtpStats}
             />
             <AllSettings
               onNavigateToScreenShare={() => setCurrentScreen('screen-share-settings')}
@@ -336,6 +347,7 @@ export default function App() {
               currentUserId={currentUserId || undefined}
               connectionState={connectionState}
               displayName={displayName || currentUserId || 'User'}
+              rtpStats={rtpStats}
             />
             <ScreenShareSettings
               onClose={() => setCurrentScreen('muted')}

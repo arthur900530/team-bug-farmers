@@ -392,6 +392,65 @@ export class MediasoupClient {
   }
 
   /**
+   * Get transport stats for RTP delivery feedback
+   * Returns packet loss, jitter, and RTT from WebRTC stats
+   */
+  async getStats(): Promise<{ lossPct: number; jitterMs: number; rttMs: number; packetsReceived: number; packetsSent: number }> {
+    const stats = {
+      lossPct: 0,
+      jitterMs: 0,
+      rttMs: 0,
+      packetsReceived: 0,
+      packetsSent: 0
+    };
+
+    try {
+      // Get send transport stats (for outgoing audio)
+      if (this.sendTransport) {
+        const sendStats = await this.sendTransport.getStats();
+        for (const report of sendStats.values()) {
+          if (report.type === 'outbound-rtp' && report.kind === 'audio') {
+            stats.packetsSent = report.packetsSent || 0;
+          }
+          if (report.type === 'remote-inbound-rtp' && report.kind === 'audio') {
+            // Remote reports contain loss and RTT info
+            stats.lossPct = report.fractionLost || 0;
+            stats.rttMs = report.roundTripTime ? report.roundTripTime * 1000 : 0;
+            stats.jitterMs = report.jitter ? report.jitter * 1000 : 0;
+          }
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            // RTT from ICE candidate pair
+            if (report.currentRoundTripTime) {
+              stats.rttMs = report.currentRoundTripTime * 1000;
+            }
+          }
+        }
+      }
+
+      // Get receive transport stats (for incoming audio)
+      if (this.recvTransport) {
+        const recvStats = await this.recvTransport.getStats();
+        for (const report of recvStats.values()) {
+          if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+            stats.packetsReceived = report.packetsReceived || 0;
+            stats.jitterMs = report.jitter ? report.jitter * 1000 : stats.jitterMs;
+            
+            // Calculate loss from packets lost vs received
+            if (report.packetsLost && report.packetsReceived) {
+              const total = report.packetsLost + report.packetsReceived;
+              stats.lossPct = total > 0 ? report.packetsLost / total : 0;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[MediasoupClient] Error getting stats:', error);
+    }
+
+    return stats;
+  }
+
+  /**
    * Cleanup
    */
   async close(): Promise<void> {
