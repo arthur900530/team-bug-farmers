@@ -34,8 +34,17 @@ export function RtpStatsIndicator({ stats, className = '' }: RtpStatsIndicatorPr
     );
   }
 
+  // Color classes for each health status
+  const colorClassesMap = {
+    green: { bg: 'bg-green-900/30', text: 'text-green-400', dot: 'bg-green-500' },
+    yellow: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', dot: 'bg-yellow-500' },
+    red: { bg: 'bg-red-900/30', text: 'text-red-400', dot: 'bg-red-500' }
+  } as const;
+
+  type HealthColor = keyof typeof colorClassesMap;
+
   // Determine health status based on loss and jitter
-  const getHealthStatus = () => {
+  const getHealthStatus = (): { color: HealthColor; label: string; icon: typeof Wifi } => {
     if (stats.lossPct > 0.05 || stats.jitterMs > 50) {
       return { color: 'red', label: 'Poor', icon: WifiOff };
     }
@@ -47,12 +56,7 @@ export function RtpStatsIndicator({ stats, className = '' }: RtpStatsIndicatorPr
 
   const health = getHealthStatus();
   const Icon = health.icon;
-
-  const colorClasses = {
-    green: { bg: 'bg-green-900/30', text: 'text-green-400', dot: 'bg-green-500' },
-    yellow: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', dot: 'bg-yellow-500' },
-    red: { bg: 'bg-red-900/30', text: 'text-red-400', dot: 'bg-red-500' }
-  }[health.color];
+  const colorClasses = colorClassesMap[health.color];
 
   return (
     <div className={`rounded-lg ${colorClasses.bg} ${className}`}>
